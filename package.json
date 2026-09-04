@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --recursive --parallel --filter client --filter server run dev",
     "build": "pnpm -r build",
-    "test": "pnpm --filter client test",
+    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   }
 }
