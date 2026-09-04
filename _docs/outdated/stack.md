@@ -27,6 +27,7 @@ The selected stack is:
 | Runtime validation | JSON Schema with `json-schema-to-ts` |
 | Database | PostgreSQL |
 | Query layer | Kysely |
+| Identity provider | Auth0 Universal Login over OpenID Connect |
 | AI integration | AI SDK Core behind an application-owned boundary |
 | Streaming | Server-Sent Events |
 | Unit and integration tests | Vitest |
@@ -231,9 +232,13 @@ for every noun.
 Authentication is required supporting functionality. Keep authorization and
 session enforcement on the server.
 
-Select the identity provider before implementation. Prefer standards-based
-OpenID Connect over a custom password system. Do not let the identity provider
-own project data or domain authorization rules.
+Use Auth0 as the identity provider through its hosted Universal Login and the
+OpenID Connect Authorization Code flow. The Fastify server owns the callback,
+creates the application session, and stores that session in PostgreSQL. The
+browser receives only an opaque session cookie; it does not store Auth0 tokens.
+
+Auth0 owns authentication only. It must not own project data, application
+sessions, or domain authorization rules.
 
 ## Deployment
 
@@ -264,7 +269,6 @@ Do not make ordinary domain tests depend on a live model provider.
 Decide these items before their implementation starts:
 
 - AI model provider and model selection;
-- identity provider;
 - managed PostgreSQL vendor;
 - application hosting vendor;
 - observability provider;
@@ -294,4 +298,5 @@ Do not use these technologies in the MVP without new evidence:
 - [Fastify 5 LTS policy](https://fastify.dev/docs/v5.7.x/Reference/LTS/)
 - [Kysely documentation](https://www.kysely.dev/)
 - [PostgreSQL documentation](https://www.postgresql.org/docs/current/)
+- [Auth0 authentication flows](https://auth0.com/docs/get-started/authentication-and-authorization-flow)
 - [AI SDK Core](https://ai-sdk.dev/docs/reference/ai-sdk-core)
