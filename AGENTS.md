@@ -9,14 +9,10 @@ contracts and keep this section synchronized with `package.json` scripts.
 - `pnpm dev` - run the client and server development processes
 - `pnpm test` - run the complete unit and integration test suite
 - `pnpm --filter client test` - run all client tests
-- `pnpm --filter server test` - run all server tests
 - `pnpm --filter client test -- <test-file>` - run one client test file
-- `pnpm --filter server test -- <test-file>` - run one server test file
 - `pnpm build` - build every workspace package
 - `pnpm --filter client build` - type-check and build the React client
 - `pnpm --filter server build` - type-check and build the Fastify server
-- `pnpm exec playwright test` - run all browser tests
-- `pnpm exec playwright test <test-file>` - run one browser test file
 
 Add database migration commands here when Task 3 establishes them. Do not
 invent or document a command before its script exists.
@@ -58,3 +54,6 @@ invent or document a command before its script exists.
 - Do not rewrite unrelated code or change public contracts without necessity.
 - Update `_docs/stack.md` when an architectural decision changes.
 - Report files changed, commands run, results, and remaining risks when work finishes.
+- `_docs/process.md` - how work is organized
+- Before writing tests, read `_docs/testing-guidelines.md`
+- For anything touching the UI, read `_docs/design-system.md`
