@@ -19,7 +19,7 @@ test('missing database configuration names the required variable', () => {
 });
 
 test('invalid configuration has a sanitized actionable error', () => {
-  for (const value of ['secret-password', 'https://user:secret@private/app', 'postgres://user:secret@private', 'postgres://private:70000/app']) {
+  for (const value of ['secret-password', 'postgresql://user:%ZZ@localhost/app', 'https://user:secret@private/app', 'postgres://user:secret@private', 'postgres://private:70000/app']) {
     const result = readDatabaseConfiguration(value);
     assert.equal(result.valid, false);
     if (!result.valid) {

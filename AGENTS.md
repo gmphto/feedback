@@ -17,8 +17,8 @@ Keep this section synchronized with the workspace `package.json` scripts.
 - `pnpm --filter client build` - type-check and build the React client
 - `pnpm --filter server build` - type-check and build the Fastify server
 
-Add database migration commands here when Task 3 establishes them. Do not
-invent or document a command before its script exists.
+- `pnpm --filter server db:migrate` - apply PostgreSQL migrations using `DATABASE_URL`
+- `pnpm --filter server test:integration` - run real PostgreSQL tests using `TEST_DATABASE_URL`; requires CONNECT/CREATEDB and drops only run-owned databases
 
 ## Rules
 

@@ -13,6 +13,7 @@ export function readDatabaseConfiguration(
   }
   try {
     const url = new URL(value);
+    for (const component of [url.username, url.password, url.pathname]) decodeURIComponent(component);
     if (!['postgres:', 'postgresql:'].includes(url.protocol)
       || !url.hostname || url.pathname.length < 2
       || (url.port !== '' && (!/^\d+$/.test(url.port) || Number(url.port) < 1 || Number(url.port) > 65_535))) {
