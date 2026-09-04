@@ -21,4 +21,3 @@ test('a server startup failure terminates the development workspace', { timeout:
     assert.throws(() => process.kill(Number(pid), 0), { code: 'ESRCH' }, `Process ${pid} survived startup failure`);
   }
 });
-

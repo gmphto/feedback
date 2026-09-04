@@ -46,5 +46,3 @@ for (const [name, args] of [
     }
   });
 }
-
-

@@ -16,4 +16,3 @@ Run the smallest relevant test first, then the complete suite and build:
 For workspace lifecycle changes, exercise actual development startup, interrupt cleanup, and startup failure cleanup. Confirm test commands propagate a deliberately failing assertion, then remove it. Browser-check the minimal shell and its console when validating the scaffold.
 
 Workspace lifecycle regression uses Node's built-in runner: `node --test scripts/dev.test.mjs`. The root suite runs it before package tests. It uses an ephemeral client port and an invalid server port to exercise startup failure and child-process cleanup.
-

@@ -73,4 +73,3 @@ Current contributor guidance: [_docs/plan.md](_docs/plan.md),
 [_docs/stack.md](_docs/stack.md),
 [_docs/testing-guidelines.md](_docs/testing-guidelines.md), and
 [_docs/design-system.md](_docs/design-system.md).
-
