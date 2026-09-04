@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
     "build": "tsc",
     "test": "tsc -p tsconfig.test.json && tsx --test test/*.test.ts",

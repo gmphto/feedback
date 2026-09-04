@@ -7,9 +7,9 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "dev": "pnpm --recursive --parallel --filter client --filter server run dev",
+    "dev": "node scripts/dev.mjs",
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "test": "node --test scripts/*.test.mjs && pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   }
 }
