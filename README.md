@@ -131,3 +131,36 @@ with a setup message instead of skipping coverage.
 `pnpm --filter server test` type-checks and runs service-free tests followed by
 integration tests. `pnpm --filter server exec tsx --test test/readiness.test.ts`
 still runs the isolated injected API coverage without PostgreSQL.
+
+## Authentication configuration foundation (issue #4 in progress)
+
+The server has a deterministic configuration parser and persistence foundation;
+authentication routes, provider exchange and client UI are not connected yet.
+These variables describe the parser's contract, not a working login setup:
+
+| Variable | Contract |
+| --- | --- |
+| `AUTH0_ISSUER_BASE_URL` | Required HTTPS Auth0 issuer origin, e.g. `https://tenant.example/`; normalized with a trailing slash. |
+| `AUTH0_CLIENT_ID` | Required nonblank Auth0 Regular Web Application client ID; preserved exactly. |
+| `AUTH0_CLIENT_SECRET` | Required nonblank server-only client secret; preserved exactly. Never use a `VITE_` prefix or send it to the browser. |
+| `APP_ORIGIN` | Required HTTPS application origin, e.g. `https://scope.example`; normalized without a trailing slash. |
+| `AUTH_ALLOW_LOCAL_HTTP` | Absent or literal `false` by default; literal `true` requires `NODE_ENV=development` or `NODE_ENV=test`. Other values are invalid. |
+
+Issuer and application URLs reject credentials, non-root paths, queries and
+fragments. The callback URL is always normalized `APP_ORIGIN` plus
+`/auth/callback`; request Host/forwarded headers cannot select it. This is the
+callback URL to allow in the eventual Auth0 Regular Web Application setup.
+For explicit local development only, the HTTP opt-in allows `APP_ORIGIN` such
+as `http://127.0.0.1:5173` (also literal `localhost` or `[::1]`, with an optional
+port). Production and unspecified environments reject the opt-in entirely.
+HTTPS applications always require Secure cookies even with the flag enabled;
+the issuer must always use HTTPS. Fake provider transport belongs only in tests.
+
+Missing or invalid configuration returns only `authentication_unavailable` from
+the parser, never input values, credentials or parser errors. Pending routes
+will map this to HTTP 503 `{"error":"authentication_unavailable"}` and enforce
+the exact configured Origin on unsafe requests; those route guarantees are not
+implemented by the parser alone. Existing request logging now records only the
+registered route and response status, excluding raw URLs, queries, headers and
+framework request-error payloads. Future provider handlers must also avoid
+explicitly logging secrets or raw provider errors.

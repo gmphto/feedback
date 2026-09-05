@@ -1,10 +1,18 @@
-import Fastify from 'fastify';
+import Fastify, { LogController } from 'fastify';
 
 import { getReadiness } from './readiness.js';
 import type { ReadinessCheck } from './readiness.js';
 
-export function buildApp(options: { readinessCheck?: ReadinessCheck } = {}) {
-  const app = Fastify({ logger: true });
+export function buildApp(options: { readinessCheck?: ReadinessCheck; logStream?: { write(message: string): void } } = {}) {
+  // Framework request/error logs may include callback query strings and provider
+  // payloads. Emit only registered route names and status codes at this boundary.
+  const app = Fastify({
+    logger: options.logStream ? { stream: options.logStream } : true,
+    logController: new LogController({ disableRequestLogging: true }),
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    request.log.info({ route: request.routeOptions.url ?? 'unmatched', statusCode: reply.statusCode }, 'request completed');
+  });
 
   app.get('/api/ready', {
     schema: {
