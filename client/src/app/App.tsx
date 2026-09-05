@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { createAuthApi } from '../auth/api';
 import { createAuthModel, observeSession, type AuthModel } from '../auth/model';
+import { createProjectApi } from '../projects/api';
+import { createProjectModel } from '../projects/model';
+import { ProjectView } from '../projects/ProjectView';
 
 export function AuthView({ model }: { model: AuthModel }) {
   const state = useStore(model.store);
@@ -26,12 +29,27 @@ export function AuthView({ model }: { model: AuthModel }) {
 export default function App() {
   const [model] = useState(() => createAuthModel(createAuthApi(), url => window.location.assign(url),
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('authError') === '1'));
+  const [projects] = useState(() => createProjectModel(createProjectApi(), path => window.history.pushState({}, '', path), () => model.cancel(), typeof window === 'undefined' ? '/' : window.location.pathname));
+  const authentication = useStore(model.store);
   useEffect(() => observeSession(model, window), [model]);
+  useEffect(() => {
+    const sync = () => {
+      const state = model.store.getState();
+      if (state.status === 'signed-in') projects.setActor(state.user!.id);
+      else if (state.status !== 'pending' || state.operation?.action !== 'refresh') projects.setActor(null);
+    };
+    sync(); projects.resume();
+    const unsubscribe = model.store.subscribe(sync);
+    const pop = () => projects.open(window.location.pathname, false);
+    window.addEventListener('popstate', pop);
+    return () => { unsubscribe(); window.removeEventListener('popstate', pop); projects.pause(); };
+  }, [model, projects]);
   return (
     <main className="mx-auto max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
       <h1>Project Scope Tool</h1>
       <p className="mt-3 text-slate-600">Turn a rough project idea into a clear MVP scope.</p>
       <AuthView model={model} />
+      {authentication.status === 'signed-in' && <ProjectView model={projects} />}
     </main>
   );
 }

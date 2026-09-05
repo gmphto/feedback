@@ -7,7 +7,7 @@ export function pathIdentifier(value: unknown): number | undefined {
 export function projectName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const name = value.trim();
-  return name.length > 0 && [...name].length <= 200 ? name : undefined;
+  return name.length > 0 && !name.includes('\0') && [...name].length <= 200 ? name : undefined;
 }
 export function expectedVersion(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_INTEGER ? value : undefined;

@@ -9,12 +9,14 @@ import { createAuthRepository, opaqueIdentifier } from '../../src/auth/repositor
 import { createProjectModule } from '../../src/projects/module.js';
 import { buildApp } from '../../src/app.js';
 import type { AuthDependencies } from '../../src/auth/service.js';
+import { contextLimits } from '../../src/projects/creation.js';
+import { migrationProvider } from '../../src/db/migrations.js';
 
 const config = readDatabaseConfiguration(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL');
 if (!config.valid) throw new Error(config.message);
 const testUrl = config.connectionString;
 
-async function setup(t: TestContext) {
+async function setup(t: TestContext, legacy = false) {
   const admin = createDatabase(testUrl);
   const name = `scope_test_${Date.now()}_${randomBytes(6).toString('hex')}`;
   let created = false; let db: ReturnType<typeof createDatabase> | undefined;
@@ -25,7 +27,9 @@ async function setup(t: TestContext) {
   });
   await sql`create database ${sql.id(name)}`.execute(admin); created = true;
   const url = new URL(testUrl); url.pathname = `/${name}`;
-  assert.equal(await runMigrations(url.href), 0);
+  assert.equal(await runMigrations(url.href, legacy ? { async getMigrations() {
+    const migrations = await migrationProvider.getMigrations(); delete migrations['0004_project_context']; return migrations;
+  } } : migrationProvider), 0);
   db = createDatabase(url.href);
   const repository = createAuthRepository(db);
   const alice = await repository.createSession({ issuer: 'https://issuer.example/', subject: 'alice' });
@@ -38,6 +42,7 @@ async function setup(t: TestContext) {
     values (${first.id}), (${first.id}), (${second.id}), (${foreign.id}) returning id, project_id`.execute(db)).rows;
   const features = (await sql<{ id: number; feature_area_id: number }>`insert into features (feature_area_id)
     values (${areas[0]!.id}), (${areas[1]!.id}), (${areas[2]!.id}), (${areas[3]!.id}) returning id, feature_area_id`.execute(db)).rows;
+  if (legacy) assert.equal(await runMigrations(url.href), 0);
   const origin = 'https://app.example';
   const auth: AuthDependencies = {
     configuration: { issuer: 'https://issuer.example/', clientId: 'id', clientSecret: 'secret', applicationOrigin: origin, callbackUrl: `${origin}/auth/callback`, secureCookies: true },
@@ -72,7 +77,6 @@ test('owner-scoped create/read/update returns exact representations and never ac
   const owners = (await sql<{ owner_id: number }>`select owner_id from projects where id = ${context.first.id}`.execute(context.db)).rows;
   assert.equal(owners[0]!.owner_id, context.alice.user.id);
   assert.equal((await context.projects.readProject(context.bob.user, context.first.id)), undefined);
-  assert.equal((await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: 'Not exposed' } })).statusCode, 404);
 });
 
 test('lists scope/filter before pagination, sort stably and interpret wildcard characters literally', async t => {
@@ -173,7 +177,7 @@ test('real constraints reject missing parents and unavailable project effects re
   await assert.rejects(sql`insert into feature_areas (project_id) values (2147483647)`.execute(context.db));
   await assert.rejects(sql`insert into features (feature_area_id) values (2147483647)`.execute(context.db));
   await sql`alter table projects rename to unavailable_projects`.execute(context.db);
-  for (const url of ['/api/projects', `/api/projects/${context.first.id}`, `/api/projects/${context.first.id}/feature-areas/${context.areas[0]!.id}`]) {
+  for (const url of ['/api/projects', `/api/projects/${context.first.id}`, `/api/projects/${context.first.id}/definition`, `/api/projects/${context.first.id}/feature-areas/${context.areas[0]!.id}`]) {
     shape(await context.app.inject({ url, headers: context.headers }), 503, { error: 'project_unavailable' });
   }
   shape(await context.app.inject({ method: 'PATCH', url: `/api/projects/${context.first.id}`, headers: context.headers, payload: { name: 'fails', expectedVersion: 1 } }), 503, { error: 'project_unavailable' });
@@ -205,5 +209,56 @@ test('router-level malformed URLs preserve Origin/session precedence and sanitiz
       }
     }
   }
+  assert.deepEqual(await snapshot(context), before);
+});
+
+test('minimal/full creation saves exact context and reloads owner-scoped definitions without changing summaries', async t => {
+  const context = await setup(t, true);
+  const empty = Object.fromEntries(Object.keys(contextLimits).map(key => [key, '']));
+  shape(await context.app.inject({ url: `/api/projects/${context.first.id}/definition`, headers: context.headers }), 200, { project: { ...context.first, ...empty } });
+  const minimal = await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: '  New  ' } });
+  assert.equal(minimal.statusCode, 201); const id = minimal.json().project.id;
+  shape(minimal, 201, { project: { id, name: 'New', version: 1, ...empty } });
+  assert.equal(minimal.headers.location, `/api/projects/${id}/definition`);
+  const payload = { name: ' Full ', ...Object.fromEntries(Object.keys(contextLimits).map(key => [key, `  ${key}\n<script>plain text</script>🙂  `])) };
+  const full = await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload });
+  assert.equal(full.statusCode, 201); const saved = full.json().project;
+  assert.deepEqual(saved, { ...payload, name: 'Full', id: saved.id, version: 1 });
+  shape(await context.app.inject({ url: full.headers.location!, headers: context.headers }), 200, { project: saved });
+  shape(await context.app.inject({ url: full.headers.location!, headers: { ...context.headers, cookie: `__Host-scope_session=${context.bob.identifier}` } }), 404, { error: 'not_found' });
+  shape(await context.app.inject({ method: 'PATCH', url: `/api/projects/${saved.id}`, headers: context.headers, payload: { name: 'Renamed', expectedVersion: 1 } }), 200, { project: { id: saved.id, name: 'Renamed', version: 2 } });
+  shape(await context.app.inject({ url: full.headers.location!, headers: context.headers }), 200, { project: { ...saved, name: 'Renamed', version: 2 } });
+  assert.equal((await sql`select * from feature_areas`.execute(context.db)).rows.length, 4);
+  assert.equal((await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: 'New' } })).statusCode, 201);
+});
+
+test('creation field errors preserve atomicity and reject wrong types, NUL and forged identity', async t => {
+  const context = await setup(t); const before = await snapshot(context);
+  for (const [field, limit] of Object.entries({ name: 200, ...contextLimits })) {
+    for (const value of ['x'.repeat(limit + 1), null, 1, [], {}, '\0']) {
+      const response = await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: 'Good', [field]: value } });
+      assert.equal(response.statusCode, 400); assert.deepEqual(Object.keys(response.json()).sort(), ['error', 'fields']);
+      assert.equal(response.json().error, 'invalid_request'); assert.equal(typeof response.json().fields[field], 'string');
+    }
+  }
+  for (const key of ['ownerId', 'owner_id', 'id', 'version', 'extra']) {
+    const response = await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: 'Good', [key]: 1 } });
+    assert.equal(response.statusCode, 400); assert.ok(response.json().fields._form);
+  }
+  for (const payload of ['{bad', 'null', '[]', '1']) {
+    const response = await context.app.inject({ method: 'POST', url: '/api/projects', headers: { ...context.headers, 'content-type': 'application/json' }, payload });
+    assert.equal(response.statusCode, 400); assert.ok(response.json().fields._form);
+  }
+  assert.deepEqual(await snapshot(context), before);
+  const astral = await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: '🙂'.repeat(200), primaryUser: '🙂'.repeat(4000) } });
+  assert.equal(astral.statusCode, 201); assert.equal(astral.json().project.primaryUser, '🙂'.repeat(4000));
+});
+
+test('creation authenticates before input validation and handles database failure without a partial project', async t => {
+  const context = await setup(t); const before = await snapshot(context);
+  shape(await context.app.inject({ method: 'POST', url: '/api/projects', headers: { origin: context.origin }, payload: {} }), 401, { error: 'unauthorized' });
+  shape(await context.app.inject({ method: 'POST', url: '/api/projects', headers: { cookie: context.headers.cookie }, payload: { name: 'Denied' } }), 403, { error: 'forbidden' });
+  await sql`alter table projects add constraint simulated_creation_failure check (name <> 'Fails')`.execute(context.db);
+  shape(await context.app.inject({ method: 'POST', url: '/api/projects', headers: context.headers, payload: { name: 'Fails', roughIdea: 'Must not partially persist' } }), 503, { error: 'project_unavailable' });
   assert.deepEqual(await snapshot(context), before);
 });

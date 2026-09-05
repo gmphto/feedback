@@ -3,10 +3,14 @@ import { requireSession } from '../auth/routes.js';
 import type { AuthDependencies } from '../auth/service.js';
 import type { ProjectActor, ProjectModule } from './module.js';
 import { expectedVersion, pathIdentifier, projectListOptions, projectName } from './policy.js';
+import { contextLimits, creationSchema, validateProjectInput } from './creation.js';
 
 const error = (name: string) => ({ type: 'object', additionalProperties: false, required: ['error'], properties: { error: { type: 'string', const: name } } });
 const project = { type: 'object', additionalProperties: false, required: ['id', 'name', 'version'], properties: { id: { type: 'integer' }, name: { type: 'string' }, version: { type: 'integer' } } };
 const envelope = { type: 'object', additionalProperties: false, required: ['project'], properties: { project } };
+const definition = { ...project, required: [...project.required, ...Object.keys(contextLimits)], properties: { ...project.properties, ...Object.fromEntries(Object.keys(contextLimits).map(key => [key, { type: 'string' }])) } };
+const definitionEnvelope = { ...envelope, properties: { project: definition } };
+const creationError = { type: 'object', additionalProperties: false, required: ['error', 'fields'], properties: { error: { type: 'string', const: 'invalid_request' }, fields: { type: 'object', additionalProperties: { type: 'string' } } } };
 const errors = { 400: error('invalid_request'), 404: error('not_found') };
 const params = (...keys: string[]) => ({ type: 'object', required: keys, additionalProperties: false, properties: Object.fromEntries(keys.map(key => [key, { type: 'string' }])) });
 
@@ -17,13 +21,32 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
     const actor = await requireSession(request, reply, auth);
     if (actor) actors.set(request, actor);
   });
-  app.setErrorHandler<FastifyError>((failure, _request, reply) => {
+  app.setErrorHandler<FastifyError>((failure, request, reply) => {
     if (failure.validation || (failure.statusCode && failure.statusCode >= 400 && failure.statusCode < 500)) {
+      if (request.method === 'POST' && request.routeOptions.url === '/api/projects') return reply.code(400).send({ error: 'invalid_request', fields: { _form: 'Submit valid JSON containing the project fields.' } });
       return reply.code(400).send({ error: 'invalid_request' });
     }
     return reply.code(503).send({ error: 'project_unavailable' });
   });
   function module() { if (!projects) throw new Error('Unavailable project service'); return projects; }
+
+  app.post('/api/projects', {
+    attachValidation: true,
+    schema: { body: creationSchema, response: { 201: definitionEnvelope, 400: creationError } },
+  }, async (request, reply) => {
+    const validated = validateProjectInput(request.body);
+    if (!validated.valid) return reply.code(400).send({ error: 'invalid_request', fields: validated.fields });
+    const project = await module().createDefinition(actors.get(request)!, validated.input);
+    return reply.code(201).header('location', `/api/projects/${project.id}/definition`).send({ project });
+  });
+  app.get<{ Params: { projectId: string } }>('/api/projects/:projectId/definition', {
+    schema: { params: params('projectId'), response: { 200: definitionEnvelope, ...errors } },
+  }, async (request, reply) => {
+    const id = pathIdentifier(request.params.projectId);
+    if (!id) return reply.code(400).send({ error: 'invalid_request' });
+    const project = await module().readDefinition(actors.get(request)!, id);
+    return project ? { project } : reply.code(404).send({ error: 'not_found' });
+  });
 
   app.get<{ Querystring: Record<string, unknown> }>('/api/projects', {
     schema: { querystring: { type: 'object', additionalProperties: false, properties: { name: { type: 'string' }, limit: { type: 'string' }, offset: { type: 'string' } } },

@@ -1,15 +1,32 @@
 import { sql } from 'kysely';
 import type { createDatabase } from '../db/database.js';
 import { projectName, type ProjectListOptions } from './policy.js';
+import { validateProjectInput, type ProjectInput } from './creation.js';
 
 export type ProjectActor = { id: number };
 export type Project = { id: number; name: string; version: number };
+export type ProjectDefinition = Project & ProjectInput;
+const definitionColumns = sql`id, name, version, rough_idea as "roughIdea", primary_user as "primaryUser",
+  core_job as "coreJob", main_problem as "mainProblem", mvp_outcome as "mvpOutcome",
+  initial_product_areas as "initialProductAreas", constraints`;
 export type RenameResult = { outcome: 'saved' | 'conflict'; project: Project } | { outcome: 'not_found' };
 
 // This is the complete production project persistence surface. The database is
 // closure-owned; no unscoped lookup/update or arbitrary SQL callback is exposed.
 export function createProjectModule(db: ReturnType<typeof createDatabase>) {
   return {
+    async createDefinition(actor: ProjectActor, input: ProjectInput): Promise<ProjectDefinition> {
+      const validated = validateProjectInput(input);
+      if (!validated.valid) throw new Error('Invalid project fields');
+      const value = validated.input;
+      return (await sql<ProjectDefinition>`insert into projects
+        (owner_id, name, rough_idea, primary_user, core_job, main_problem, mvp_outcome, initial_product_areas, constraints)
+        values (${actor.id}, ${value.name}, ${value.roughIdea}, ${value.primaryUser}, ${value.coreJob}, ${value.mainProblem}, ${value.mvpOutcome}, ${value.initialProductAreas}, ${value.constraints})
+        returning ${definitionColumns}`.execute(db)).rows[0]!;
+    },
+    async readDefinition(actor: ProjectActor, id: number): Promise<ProjectDefinition | undefined> {
+      return (await sql<ProjectDefinition>`select ${definitionColumns} from projects where id = ${id} and owner_id = ${actor.id}`.execute(db)).rows[0];
+    },
     async createProject(actor: ProjectActor, inputName: string): Promise<Project> {
       const name = projectName(inputName);
       if (!name) throw new Error('Invalid project name');

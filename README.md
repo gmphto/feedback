@@ -162,8 +162,8 @@ transaction. A stale owner write returns 409
 without changing data. Missing/foreign resources and parent mismatches return
 the identical 404 `{ "error": "not_found" }`; foreign actors never see a
 conflict representation. Submitted owner IDs, identity fields and extra PATCH
-fields are rejected rather than silently removed. An internal create command
-sets the owner from its actor; there is no public creation endpoint or UI yet.
+fields are rejected rather than silently removed. Creation sets the owner from
+its authenticated actor; the form and endpoint below never accept an owner field.
 
 Lists accept only optional `name` (case-insensitive literal substring, at most
 200 characters), `limit` (1–100, default 50), and `offset` (nonnegative safe
@@ -188,6 +188,71 @@ Run focused policy tests with
 `TEST_DATABASE_URL` and run
 `pnpm --filter server exec tsx --test test/integration/projects.test.ts` before
 the full test/build commands.
+
+## Create a project and save starting context
+
+After signing in, choose **Create project** or open `/projects/new`. The form
+has eight fields; only project name is required. Character limits count Unicode
+code points, so astral characters count once. Native UTF-16 maxlength attributes
+do not prevent valid input. Name is trimmed; all optional text, including spaces
+and newlines, is preserved exactly. No field accepts a NUL character.
+
+| Input key | Visible field | Limit |
+| --- | --- | --- |
+| `name` | Project name (required) | 200 |
+| `roughIdea` | Rough idea / notes | 10000 |
+| `primaryUser` | Primary user | 4000 |
+| `coreJob` | Core job | 4000 |
+| `mainProblem` | Main user problem | 4000 |
+| `mvpOutcome` | Desired MVP outcome | 4000 |
+| `initialProductAreas` | Initial product areas | 4000 |
+| `constraints` | Known constraints | 10000 |
+
+`POST /api/projects` accepts only these string keys, with optional values omitted
+or supplied as text. Omitted values become empty strings; null/numbers/arrays/
+objects and owner/identity/version fields are invalid. Migration
+`0004_project_context` adds the optional columns and gives existing projects
+empty strings. One atomic insert assigns the session owner's ID and version 1.
+Success returns 201 with `Location: /api/projects/<id>/definition` and the exact
+`project` envelope containing id, name, version and all seven optional fields.
+Duplicate names are allowed.
+
+`GET /api/projects/:projectId/definition` reloads that complete envelope for the
+owner. Existing summary/list/name-PATCH contracts keep their smaller shapes;
+name updates preserve every optional field. The form navigates to
+`/projects/<id>` only after confirmed creation. Direct URLs, reload and browser
+back/forward fetch the saved owner-scoped definition through the API facade.
+The saved view displays all seven context fields, marks empty strings as
+**Not supplied**, and renders supplied content as text, never HTML. Initial
+product-area text does not create feature-area rows or approved scope.
+
+Create validation returns 400
+`{ "error": "invalid_request", "fields": { "name": "Enter a project name." } }`.
+Malformed JSON/top-level shapes and unknown keys use `_form`. The form keeps
+entered values, links accessible errors to fields and permits corrections.
+Authentication, Origin, ownership, no-store and sanitized 503 contracts remain
+in force. A 401 clears the protected display and returns to sign-in.
+
+Pending submission is announced and guarded in both the command model and UI,
+so repeated clicks before a rerender send one request. Failures do not navigate
+or render success, and no POST is retried automatically. A lost response may
+follow a successful server commit; users must check before deliberately retrying.
+Cancelling/leaving before submission sends nothing. After dispatch, cancellation
+aborts observation and invalidates the operation, but the server may still save.
+Late responses cannot overwrite a new draft or view, navigate after cancellation,
+or repopulate another session's state. Sign-out clears project representations.
+Drafts and saved API data have separate mutation owners and are not stored in
+browser storage.
+
+The test-only browser harness below supports project timing/failure inspection:
+open `/api/test/projects?delay=2000&failure=false` on the app origin, return to
+the form and submit/cancel/back during pending work. Use `failure=true` for a
+sanitized create/read failure and `failure=false&delay=300` to restore service.
+Only the explicit harness exposes these controls. Verify field corrections,
+keyboard submit/cancel, heading focus after navigation, reload, back/forward,
+and narrow/wide layouts. Model/API tests cover operation races and cache/draft
+separation; real PostgreSQL tests cover exact text, field limits, upgrade defaults,
+atomic failure and owner isolation.
 
 ## Auth0 authentication
 

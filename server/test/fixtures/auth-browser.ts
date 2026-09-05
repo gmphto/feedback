@@ -6,6 +6,7 @@ import { readDatabaseConfiguration } from '../../src/db/configuration.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { createAuthRepository } from '../../src/auth/repository.js';
 import { buildApp } from '../../src/app.js';
+import { createProjectModule } from '../../src/projects/module.js';
 import { fakeProvider, type ProviderMode } from '../support/oidc-provider.js';
 
 const configuration = readDatabaseConfiguration(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL');
@@ -28,12 +29,27 @@ try {
   if (await runMigrations(url.href) !== 0) throw new Error('Test migration failed');
   const db = createDatabase(url.href); cleanups.push(() => db.destroy());
   const provider = await fakeProvider({ after(cleanup) { cleanups.push(cleanup); } });
-  const app = buildApp({ auth: { configuration: provider.config, provider: provider.provider, repository: createAuthRepository(db) } });
+  const projectControls = { delay: 300, failure: false };
+  const projects = createProjectModule(db);
+  const projectDelay = async () => {
+    await new Promise(resolve => setTimeout(resolve, projectControls.delay));
+    if (projectControls.failure) throw new Error('Test-only project availability failure');
+  };
+  const app = buildApp({ auth: { configuration: provider.config, provider: provider.provider, repository: createAuthRepository(db) }, projects: {
+    ...projects,
+    async createDefinition(...args) { await projectDelay(); return projects.createDefinition(...args); },
+    async readDefinition(...args) { await projectDelay(); return projects.readDefinition(...args); },
+  } });
   cleanups.push(() => app.close());
   app.get<{ Querystring: { mode?: string } }>('/api/test/provider-mode', async request => {
     const modes: ProviderMode[] = ['valid', 'cancel', 'failure', 'signature', 'issuer', 'audience', 'expiry', 'nonce', 'future', 'missing-token'];
     if (modes.includes(request.query.mode as ProviderMode)) provider.fixture.mode = request.query.mode as ProviderMode;
     return { mode: provider.fixture.mode };
+  });
+  app.get<{ Querystring: { delay?: string; failure?: string } }>('/api/test/projects', async request => {
+    if (request.query.delay !== undefined && /^\d+$/.test(request.query.delay)) projectControls.delay = Math.min(Number(request.query.delay), 10000);
+    if (request.query.failure === 'true' || request.query.failure === 'false') projectControls.failure = request.query.failure === 'true';
+    return projectControls;
   });
   // Visible pending states support keyboard/cancellation inspection.
   app.addHook('onRequest', async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
