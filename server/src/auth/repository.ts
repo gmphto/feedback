@@ -50,9 +50,11 @@ export function createAuthRepository(db: Database, clock: () => Date = () => new
       return { identifier, expiresAt, user };
     },
     async findSession(identifier: unknown): Promise<{ id: number } | undefined> {
-      if (!validIdentifier(identifier)) return undefined;
+      // Even a signed-out browser must distinguish a healthy 401 from an
+      // unavailable persistence service; an impossible digest returns no user.
+      const digest = validIdentifier(identifier) ? identifierDigest(identifier) : '';
       const result = await sql<{ id: number }>`select user_id as id from application_sessions
-        where digest = ${identifierDigest(identifier)} and revoked_at is null and expires_at > ${clock()}`.execute(db);
+        where digest = ${digest} and revoked_at is null and expires_at > ${clock()}`.execute(db);
       return result.rows[0];
     },
     async revokeSession(identifier: unknown): Promise<void> {
