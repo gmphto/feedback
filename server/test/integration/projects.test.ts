@@ -178,3 +178,32 @@ test('real constraints reject missing parents and unavailable project effects re
   }
   shape(await context.app.inject({ method: 'PATCH', url: `/api/projects/${context.first.id}`, headers: context.headers, payload: { name: 'fails', expectedVersion: 1 } }), 503, { error: 'project_unavailable' });
 });
+
+test('router-level malformed URLs preserve Origin/session precedence and sanitized no-store validation', async t => {
+  const context = await setup(t); const before = await snapshot(context);
+  const malformed = ['/api/projects/%ZZ', `/api/projects/${'1'.repeat(101)}`,
+    `/api/projects/${context.first.id}/feature-areas/%ZZ`,
+    `/api/projects/${context.first.id}/feature-areas/${context.areas[0]!.id}/features/${'1'.repeat(101)}`];
+  const unavailable = buildApp({ projects: context.projects, logStream: { write() {} } }); t.after(() => unavailable.close());
+  const failingAuth = buildApp({ auth: { ...context.auth, repository: { ...context.auth.repository,
+    async findSession() { throw new Error('private-database-failure'); },
+  } }, projects: context.projects, logStream: { write() {} } }); t.after(() => failingAuth.close());
+  for (const url of malformed) {
+    const methods: ('GET' | 'PATCH')[] = url.includes('/feature-areas/') ? ['GET'] : ['GET', 'PATCH'];
+    for (const method of methods) {
+      const payload = method === 'PATCH' ? { name: 'Must not save', expectedVersion: 1 } : undefined;
+      for (const cookie of [undefined, '__Host-scope_session=invalid']) {
+        shape(await context.app.inject({ method, url, payload, headers: { origin: context.origin, ...(cookie ? { cookie } : {}) } }), 401, { error: 'unauthorized' });
+      }
+      shape(await context.app.inject({ method, url, payload, headers: context.headers }), 400, { error: 'invalid_request' });
+      shape(await unavailable.inject({ method: 'GET', url }), 503, { error: 'authentication_unavailable' });
+      shape(await failingAuth.inject({ method: 'GET', url, headers: context.headers }), 503, { error: 'authentication_unavailable' });
+      for (const origin of method === 'PATCH' ? [undefined, 'null', 'https://foreign.example'] : []) {
+        for (const cookie of [undefined, context.headers.cookie]) {
+          shape(await context.app.inject({ method: 'PATCH', url, payload: { name: 'Must not save', expectedVersion: 1 }, headers: { ...(origin ? { origin } : {}), ...(cookie ? { cookie } : {}) } }), 403, { error: 'forbidden' });
+        }
+      }
+    }
+  }
+  assert.deepEqual(await snapshot(context), before);
+});

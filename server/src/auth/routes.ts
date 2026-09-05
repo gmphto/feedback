@@ -1,4 +1,4 @@
-import cookie from '@fastify/cookie';
+import cookie, { fastifyCookie as cookieCodec } from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { allowsBrowserMutation, safeReturnPath } from './policy.js';
 import { beginLogin, finishLogin, type AuthDependencies } from './service.js';
@@ -11,13 +11,25 @@ function cookieSettings(auth: AuthDependencies) {
 function sessionCookie(auth?: AuthDependencies) { return auth?.configuration.secureCookies ? '__Host-scope_session' : 'scope_session'; }
 function loginCookie(auth: AuthDependencies) { return auth.configuration.secureCookies ? '__Host-scope_login' : 'scope_login'; }
 
+export function requireBrowserOrigin(request: FastifyRequest, reply: FastifyReply, auth?: AuthDependencies): boolean {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+    && (!auth || !allowsBrowserMutation(request.headers.origin, auth.configuration.applicationOrigin))) {
+    reply.code(403).send({ error: 'forbidden' });
+    return false;
+  }
+  return true;
+}
+
 // Future protected routes use this same guard and never interpret cookies alone.
 export async function requireSession(request: FastifyRequest, reply: FastifyReply, auth?: AuthDependencies) {
   if (!auth) { unavailable(reply); return undefined; }
   try {
-    const user = await auth.repository.findSession(request.cookies[sessionCookie(auth)]);
+    // Router errors precede cookie hooks. The same maintained parser and guard
+    // still enforce authentication at that earlier framework boundary.
+    const parsedCookies = request.cookies ?? cookieCodec.parse(request.headers.cookie ?? '');
+    const user = await auth.repository.findSession(parsedCookies[sessionCookie(auth)]);
     if (user) return user;
-    reply.clearCookie(sessionCookie(auth), cookieSettings(auth));
+    reply.header('set-cookie', cookieCodec.serialize(sessionCookie(auth), '', { ...cookieSettings(auth), expires: new Date(0) }));
     reply.code(401).send({ error: 'unauthorized' });
   } catch { unavailable(reply); }
   return undefined;
@@ -27,10 +39,7 @@ export async function registerAuth(app: FastifyInstance, auth?: AuthDependencies
   await app.register(cookie);
   app.addHook('onRequest', async (request, reply) => {
     if (request.url.startsWith('/auth/') || request.url.startsWith('/api/session') || request.url.startsWith('/api/projects')) reply.header('cache-control', 'no-store');
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
-      && (!auth || !allowsBrowserMutation(request.headers.origin, auth.configuration.applicationOrigin))) {
-      return reply.code(403).send({ error: 'forbidden' });
-    }
+    if (!requireBrowserOrigin(request, reply, auth)) return reply;
   });
   app.get<{ Querystring: { returnTo?: string } }>('/auth/login', {
     attachValidation: true,

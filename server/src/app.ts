@@ -6,6 +6,7 @@ import { registerAuth } from './auth/routes.js';
 import type { AuthDependencies } from './auth/service.js';
 import { registerProjectRoutes } from './projects/routes.js';
 import type { ProjectModule } from './projects/module.js';
+import { handleProjectRouterError } from './projects/router-errors.js';
 
 export function buildApp(options: { readinessCheck?: ReadinessCheck; auth?: AuthDependencies; projects?: ProjectModule; logStream?: { write(message: string): void } } = {}) {
   // Framework request/error logs may include callback query strings and provider
@@ -14,6 +15,7 @@ export function buildApp(options: { readinessCheck?: ReadinessCheck; auth?: Auth
     logger: options.logStream ? { stream: options.logStream } : true,
     logController: new LogController({ disableRequestLogging: true }),
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
+    frameworkErrors: (error, request, reply) => handleProjectRouterError(error, request, reply, options.auth),
   });
   app.addHook('onResponse', async (request, reply) => {
     request.log.info({ route: request.routeOptions.url ?? 'unmatched', statusCode: reply.statusCode }, 'request completed');
