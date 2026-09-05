@@ -1,20 +1,21 @@
-import { useEffect, useRef } from 'react';
-import { useStore } from 'zustand';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { fieldKeys, projectFields } from './fields';
 import type { ProjectModel } from './model';
 
 export function ProjectView({ model }: { model: ProjectModel }) {
-  const state = useStore(model.store); const saved = useStore(model.saved);
+  const state = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
+  const saved = useSyncExternalStore(model.saved.subscribe, model.saved.getState, model.saved.getState);
+  const hasErrors = Object.keys(state.fields).length > 0;
   const heading = useRef<HTMLHeadingElement>(null);
   const errors = useRef<HTMLDivElement>(null);
   useEffect(() => { heading.current?.focus(); }, [state.route, state.status === 'saved']);
-  useEffect(() => { if (Object.keys(state.fields).length) errors.current?.focus(); }, [state.fields]);
+  useEffect(() => { if (hasErrors) errors.current?.focus(); }, [hasErrors]);
   if (state.status === 'home') return <section className="mt-8"><h2 id="page-heading" ref={heading} tabIndex={-1} className="mb-4 text-lg font-semibold">Start a project</h2><button onClick={() => model.open('/projects/new')}>Create project</button></section>;
   if (state.status === 'editing' || state.status === 'submitting') return <section className="mt-10">
     <h2 id="page-heading" ref={heading} tabIndex={-1} className="text-lg font-semibold">Create project</h2>
     <p className="mt-2 text-slate-600">Capture your starting context. This text will not create requirements or approved scope.</p>
     <form noValidate onSubmit={event => { event.preventDefault(); model.submit(); }} className="mt-6 space-y-6">
-      {Object.keys(state.fields).length > 0 && <div ref={errors} tabIndex={-1} role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4">
+      {hasErrors && <div ref={errors} tabIndex={-1} role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4">
         <p>{state.fields._form ?? 'Please correct the fields below.'}</p>
         <ul>{fieldKeys.filter(key => state.fields[key]).map(key => <li key={key}><a className="underline" href={`#field-${key}`}>{projectFields[key].label}: {state.fields[key]}</a></li>)}</ul>
       </div>}

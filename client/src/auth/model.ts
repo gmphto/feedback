@@ -1,6 +1,4 @@
-import { createStore } from 'zustand/vanilla';
-import { subscribeWithSelector } from 'zustand/middleware';
-import { immer } from 'zustand/middleware/immer';
+import { configureStore, createListenerMiddleware, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { AuthApi, User } from './api';
 
 type Action = 'refresh' | 'login' | 'logout';
@@ -11,44 +9,61 @@ type AuthState = {
 };
 
 export function createAuthModel(api: AuthApi, navigate: (url: string) => void, failedCallback = false) {
-  const store = createStore<AuthState>()(subscribeWithSelector(immer(() => ({
+  const initialState: AuthState = {
     status: failedCallback ? 'failure' : 'pending', user: null, operation: null,
-  }))));
+  };
+  const slice = createSlice({
+    name: 'auth', initialState,
+    reducers: {
+      requested(draft, { payload }: PayloadAction<NonNullable<AuthState['operation']>>) {
+        draft.user = null; draft.status = 'pending'; draft.operation = payload;
+      },
+      sessionReceived(draft, { payload }: PayloadAction<User | null>) {
+        draft.user = payload; draft.status = payload ? 'signed-in' : 'signed-out';
+      },
+      failed(draft) { draft.user = null; draft.status = 'failure'; },
+      cancelled(draft) { draft.user = null; draft.status = 'signed-out'; draft.operation = null; },
+    },
+  });
+  const listener = createListenerMiddleware<AuthState>();
+  const store = configureStore({ reducer: slice.reducer, middleware: defaults => defaults().prepend(listener.middleware) });
   let version = 0;
   let controller: AbortController | undefined;
-  // Selector subscription is the listener middleware: commands record intent;
-  // this one effect owner performs/cancels network and navigation work.
-  const unsubscribe = store.subscribe(state => state.operation, async operation => {
-    controller?.abort();
-    if (!operation) return;
-    const current = new AbortController(); controller = current;
-    const isCurrent = () => !current.signal.aborted && operation.id === version;
-    try {
-      if (operation.action === 'login') {
-        const url = await api.beginLogin(current.signal);
-        if (isCurrent()) navigate(url);
-        return;
+  const unsubscribe = listener.startListening({
+    predicate: (_action, current, previous) => current.operation !== previous.operation,
+    effect: async (_action, listenerApi) => {
+      const operation = listenerApi.getState().operation;
+      controller?.abort();
+      if (!operation) return;
+      const current = new AbortController(); controller = current;
+      const isCurrent = () => !current.signal.aborted && operation.id === version;
+      try {
+        if (operation.action === 'login') {
+          const url = await api.beginLogin(current.signal);
+          if (isCurrent()) navigate(url);
+          return;
+        }
+        let user: User | null = null;
+        if (operation.action === 'logout') await api.logout(current.signal);
+        else user = await api.currentSession(current.signal);
+        if (isCurrent()) store.dispatch(slice.actions.sessionReceived(user));
+      } catch {
+        if (isCurrent()) store.dispatch(slice.actions.failed());
       }
-      let user: User | null = null;
-      if (operation.action === 'logout') await api.logout(current.signal);
-      else user = await api.currentSession(current.signal);
-      if (isCurrent()) store.setState(draft => { draft.user = user; draft.status = user ? 'signed-in' : 'signed-out'; });
-    } catch {
-      if (isCurrent()) store.setState(draft => { draft.user = null; draft.status = 'failure'; });
-    }
+    },
   });
   function request(action: Action) {
     version++;
-    store.setState(draft => { draft.user = null; draft.status = 'pending'; draft.operation = { action, id: version }; });
+    store.dispatch(slice.actions.requested({ action, id: version }));
   }
   return {
-    store,
+    store: { getState: store.getState, subscribe: store.subscribe },
     refresh: () => request('refresh'),
     signIn: () => request('login'),
     signOut: () => request('logout'),
     cancel() {
       version++; controller?.abort();
-      store.setState(draft => { draft.user = null; draft.status = 'signed-out'; draft.operation = null; });
+      store.dispatch(slice.actions.cancelled());
     },
     pause() { version++; controller?.abort(); },
     dispose() { controller?.abort(); unsubscribe(); },

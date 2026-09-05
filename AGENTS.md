@@ -29,13 +29,12 @@ Keep this section synchronized with the workspace `package.json` scripts.
 - Follow the selected TypeScript modular-monolith architecture.
 - Use a pnpm workspace with separate `client` and `server` packages.
 - Use Vite, React 19, strict TypeScript, and Tailwind CSS 4 in the client.
-- Use Zustand, Immer draft recipes, and listener middleware for client state.
+- Use Redux Toolkit, Immer draft recipes, and Redux Toolkit listener middleware for client state.
 - Use Fastify 5, Kysely, and PostgreSQL on the server.
 - Use JSON Schema for runtime transport validation. Do not use Zod.
 - Keep client and server wire types separate. Do not add a shared types package.
 - Use integer identifiers for relational entities. Do not use GUIDs.
 - Use plain exported command functions. Do not add class-based processors.
-- Do not use Redux.
 - Add dependencies in the owning package's `package.json`.
 - Do not add, remove, or upgrade a dependency without asking the user first.
 - Prefer platform and framework features before adding a package.

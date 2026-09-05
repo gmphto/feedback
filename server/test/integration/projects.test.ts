@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
 import { test, type TestContext } from 'node:test';
 import { sql } from 'kysely';
-import { createDatabase } from '../../src/db/database.js';
-import { readDatabaseConfiguration } from '../../src/db/configuration.js';
+import { isolated } from '../support/database.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { createAuthRepository, opaqueIdentifier } from '../../src/auth/repository.js';
 import { createProjectModule } from '../../src/projects/module.js';
@@ -12,37 +10,37 @@ import type { AuthDependencies } from '../../src/auth/service.js';
 import { contextLimits } from '../../src/projects/creation.js';
 import { migrationProvider } from '../../src/db/migrations.js';
 
-const config = readDatabaseConfiguration(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL');
-if (!config.valid) throw new Error(config.message);
-const testUrl = config.connectionString;
+async function seedProject(projects: ReturnType<typeof createProjectModule>, actor: { id: number }, name: string) {
+  const saved = await projects.createDefinition(actor, {
+    name, roughIdea: '', primaryUser: '', coreJob: '', mainProblem: '',
+    mvpOutcome: '', initialProductAreas: '', constraints: '',
+  });
+  return { id: saved.id, name: saved.name, version: saved.version };
+}
 
 async function setup(t: TestContext, legacy = false) {
-  const admin = createDatabase(testUrl);
-  const name = `scope_test_${Date.now()}_${randomBytes(6).toString('hex')}`;
-  let created = false; let db: ReturnType<typeof createDatabase> | undefined;
-  t.after(async () => {
-    await db?.destroy();
-    try { if (created) await sql`drop database ${sql.id(name)}`.execute(admin); }
-    finally { await admin.destroy(); }
-  });
-  await sql`create database ${sql.id(name)}`.execute(admin); created = true;
-  const url = new URL(testUrl); url.pathname = `/${name}`;
-  assert.equal(await runMigrations(url.href, legacy ? { async getMigrations() {
+  const { db, url } = await isolated(t);
+  assert.equal(await runMigrations(url, legacy ? { async getMigrations() {
     const migrations = await migrationProvider.getMigrations(); delete migrations['0004_project_context']; return migrations;
   } } : migrationProvider), 0);
-  db = createDatabase(url.href);
   const repository = createAuthRepository(db);
   const alice = await repository.createSession({ issuer: 'https://issuer.example/', subject: 'alice' });
   const bob = await repository.createSession({ issuer: 'https://issuer.example/', subject: 'bob' });
   const projects = createProjectModule(db);
-  const first = await projects.createProject(alice.user, 'Alpha');
-  const second = await projects.createProject(alice.user, 'Beta');
-  const foreign = await projects.createProject(bob.user, 'A foreign project');
+  // Only the migration regression seeds the old schema; createDefinition needs 0004.
+  const seeds = legacy
+    ? (await sql<{ id: number; name: string; version: number }>`insert into projects (owner_id, name)
+        values (${alice.user.id}, 'Alpha'), (${alice.user.id}, 'Beta'), (${bob.user.id}, 'A foreign project')
+        returning id, name, version`.execute(db)).rows
+    : [await seedProject(projects, alice.user, 'Alpha'),
+       await seedProject(projects, alice.user, 'Beta'),
+       await seedProject(projects, bob.user, 'A foreign project')];
+  const [first, second, foreign] = [seeds[0]!, seeds[1]!, seeds[2]!];
   const areas = (await sql<{ id: number; project_id: number }>`insert into feature_areas (project_id)
     values (${first.id}), (${first.id}), (${second.id}), (${foreign.id}) returning id, project_id`.execute(db)).rows;
   const features = (await sql<{ id: number; feature_area_id: number }>`insert into features (feature_area_id)
     values (${areas[0]!.id}), (${areas[1]!.id}), (${areas[2]!.id}), (${areas[3]!.id}) returning id, feature_area_id`.execute(db)).rows;
-  if (legacy) assert.equal(await runMigrations(url.href), 0);
+  if (legacy) assert.equal(await runMigrations(url), 0);
   const origin = 'https://app.example';
   const auth: AuthDependencies = {
     configuration: { issuer: 'https://issuer.example/', clientId: 'id', clientSecret: 'secret', applicationOrigin: origin, callbackUrl: `${origin}/auth/callback`, secureCookies: true },
@@ -81,10 +79,10 @@ test('owner-scoped create/read/update returns exact representations and never ac
 
 test('lists scope/filter before pagination, sort stably and interpret wildcard characters literally', async t => {
   const context = await setup(t);
-  const alpha = await context.projects.createProject(context.alice.user, 'Alpha');
-  const percent = await context.projects.createProject(context.alice.user, 'Special % value');
-  const underscore = await context.projects.createProject(context.alice.user, 'Special _ value');
-  await context.projects.createProject(context.bob.user, 'Alpha hidden');
+  const alpha = await seedProject(context.projects, context.alice.user, 'Alpha');
+  const percent = await seedProject(context.projects, context.alice.user, 'Special % value');
+  const underscore = await seedProject(context.projects, context.alice.user, 'Special _ value');
+  await seedProject(context.projects, context.bob.user, 'Alpha hidden');
   shape(await context.app.inject({ url: '/api/projects?name=ALPHA&limit=1&offset=1', headers: context.headers }), 200, { projects: [alpha] });
   shape(await context.app.inject({ url: '/api/projects?name=%25', headers: context.headers }), 200, { projects: [percent] });
   shape(await context.app.inject({ url: '/api/projects?name=_', headers: context.headers }), 200, { projects: [underscore] });

@@ -1,40 +1,15 @@
 import { createServer, type Socket } from 'node:net';
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { test, type TestContext } from 'node:test';
+import { test } from 'node:test';
 import { sql } from 'kysely';
 import { createDatabase } from '../../src/db/database.js';
-import { readDatabaseConfiguration } from '../../src/db/configuration.js';
+import { isolated } from '../support/database.js';
 import { migrationProvider } from '../../src/db/migrations.js';
 import { buildProductionApp } from '../../src/production-app.js';
 import { createAuthRepository, identifierDigest, opaqueIdentifier } from '../../src/auth/repository.js';
 import { LOGIN_LIFETIME_MS, SESSION_LIFETIME_MS } from '../../src/auth/policy.js';
-
-const config = readDatabaseConfiguration(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL');
-if (!config.valid) throw new Error(config.message);
-const testUrl = config.connectionString;
-
-async function isolated(t: TestContext) {
-  const admin = createDatabase(testUrl);
-  const name = `scope_test_${Date.now()}_${randomBytes(6).toString('hex')}`;
-  let created = false;
-  let db: ReturnType<typeof createDatabase> | undefined;
-  t.after(async () => {
-    await db?.destroy();
-    try {
-      // Only our successfully created, unique database can reach this cleanup.
-      if (created) await sql`drop database ${sql.id(name)}`.execute(admin);
-    } finally { await admin.destroy(); }
-  });
-  await sql`create database ${sql.id(name)}`.execute(admin);
-  created = true;
-  const url = new URL(testUrl);
-  url.pathname = `/${name}`;
-  db = createDatabase(url.href);
-  return { db, url: url.href };
-}
 
 async function command(url: string | undefined, fixture = false) {
   const env = { ...process.env };

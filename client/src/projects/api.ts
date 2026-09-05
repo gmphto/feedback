@@ -1,23 +1,25 @@
-import { createStore } from 'zustand/vanilla';
-import { immer } from 'zustand/middleware/immer';
+import { configureStore, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { fieldKeys, type FieldErrors, type ProjectDraft } from './fields';
+import { matchesSchema, type Schema } from '../transport/schema';
 
-export type ProjectDefinition = ProjectDraft & { id: number; version: number };
-export type ProjectFailure = { kind: 'unauthorized' | 'missing' | 'unavailable' } | { kind: 'invalid'; fields: FieldErrors };
-const definitionSchema = { type: 'object', additionalProperties: false, required: ['id', 'version', ...fieldKeys], properties: {
-  id: { type: 'integer' }, version: { type: 'integer' }, ...Object.fromEntries(fieldKeys.map(key => [key, { type: 'string' }])),
-} };
+type ProjectDefinition = ProjectDraft & { id: number; version: number };
+type ProjectFailure = { kind: 'unauthorized' | 'missing' | 'unavailable' } | { kind: 'invalid'; fields: FieldErrors };
+const definitionSchema: Schema = {
+  type: 'object', additionalProperties: false, required: ['project'],
+  properties: {
+    project: {
+      type: 'object', additionalProperties: false, required: ['id', 'version', ...fieldKeys],
+      properties: {
+        id: { type: 'integer', minimum: 1, maximum: 2147483647 },
+        version: { type: 'integer', minimum: 1 },
+        ...Object.fromEntries(fieldKeys.map(key => [key, { type: 'string' } as const])),
+      },
+    },
+  },
+};
 function decodeDefinition(body: unknown): ProjectDefinition {
-  if (!body || typeof body !== 'object' || Object.keys(body).join() !== 'project') throw { kind: 'unavailable' };
-  const value = (body as { project: unknown }).project;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw { kind: 'unavailable' };
-  const object = value as Record<string, unknown>;
-  if (!definitionSchema.required.every(key => Object.hasOwn(object, key))
-    || Object.keys(object).some(key => !Object.hasOwn(definitionSchema.properties, key))
-    || fieldKeys.some(key => typeof object[key] !== 'string')
-    || !Number.isInteger(object.id) || Number(object.id) <= 0 || Number(object.id) > 2147483647
-    || !Number.isInteger(object.version) || Number(object.version) <= 0) throw { kind: 'unavailable' };
-  return object as ProjectDefinition;
+  if (!matchesSchema(body, definitionSchema)) throw { kind: 'unavailable' };
+  return (body as { project: ProjectDefinition }).project;
 }
 async function decodeResponse(response: Response): Promise<ProjectDefinition> {
   if (response.status === 401) throw { kind: 'unauthorized' };
@@ -43,23 +45,31 @@ export function projectFailure(error: unknown): ProjectFailure {
 
 export function createProjectApi(request: typeof fetch = fetch) {
   // The facade is the sole mutation authority for saved server representations.
-  const saved = createStore<{ project: ProjectDefinition | null }>()(immer(() => ({ project: null })));
-  async function receive(response: Promise<Response>, signal: AbortSignal, current: () => boolean, expectedStatus: number, expectedId?: number) {
+  const initialState: { project: ProjectDefinition | null } = { project: null };
+  const slice = createSlice({
+    name: 'savedProject', initialState,
+    reducers: {
+      received(draft, { payload }: PayloadAction<ProjectDefinition>) { draft.project = payload; },
+      cleared(draft) { draft.project = null; },
+    },
+  });
+  const saved = configureStore({ reducer: slice.reducer });
+  async function validateAndCacheResponse(response: Promise<Response>, signal: AbortSignal, isOperationCurrent: () => boolean, expectedStatus: number, expectedId?: number) {
     const result = await response;
     if (result.ok && result.status !== expectedStatus) throw { kind: 'unavailable' };
     const project = await decodeResponse(result);
     if ((expectedId !== undefined && project.id !== expectedId) || (expectedStatus === 201 && project.version !== 1)) throw { kind: 'unavailable' };
-    if (!signal.aborted && current()) saved.setState(draft => { draft.project = project; });
+    if (!signal.aborted && isOperationCurrent()) saved.dispatch(slice.actions.received(project));
     return project;
   }
   return {
-    saved,
-    clear() { saved.setState(draft => { draft.project = null; }); },
-    create(input: ProjectDraft, signal: AbortSignal, current: () => boolean) {
-      return receive(request('/api/projects', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal }), signal, current, 201);
+    saved: { getState: saved.getState, subscribe: saved.subscribe },
+    clear() { saved.dispatch(slice.actions.cleared()); },
+    create(input: ProjectDraft, signal: AbortSignal, isOperationCurrent: () => boolean) {
+      return validateAndCacheResponse(request('/api/projects', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal }), signal, isOperationCurrent, 201);
     },
-    read(id: number, signal: AbortSignal, current: () => boolean) {
-      return receive(request(`/api/projects/${id}/definition`, { credentials: 'same-origin', cache: 'no-store', signal }), signal, current, 200, id);
+    read(id: number, signal: AbortSignal, isOperationCurrent: () => boolean) {
+      return validateAndCacheResponse(request(`/api/projects/${id}/definition`, { credentials: 'same-origin', cache: 'no-store', signal }), signal, isOperationCurrent, 200, id);
     },
   };
 }

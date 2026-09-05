@@ -1,10 +1,6 @@
 export const SESSION_LIFETIME_MS = 8 * 60 * 60 * 1_000;
 export const LOGIN_LIFETIME_MS = 10 * 60 * 1_000;
 
-export function hasExpired(expiresAt: Date, now: Date): boolean {
-  return expiresAt.getTime() <= now.getTime();
-}
-
 export function safeReturnPath(value: unknown): string {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')
     || /[\\\u0000-\u0020\u007f]/.test(value)) return '/';

@@ -4,10 +4,13 @@ export function pathIdentifier(value: unknown): number | undefined {
   const number = Number(value);
   return Number.isInteger(number) && number <= MAX_INTEGER ? number : undefined;
 }
-export function projectName(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
+export function validateProjectName(value: unknown): { valid: true; name: string } | { valid: false; message: string } {
+  if (typeof value !== 'string') return { valid: false, message: 'Enter plain text.' };
   const name = value.trim();
-  return name.length > 0 && !name.includes('\0') && [...name].length <= 200 ? name : undefined;
+  if (!name) return { valid: false, message: 'Enter a project name.' };
+  if (name.includes('\0')) return { valid: false, message: 'Remove the NUL character.' };
+  if ([...name].length > 200) return { valid: false, message: 'Use 200 characters or fewer.' };
+  return { valid: true, name };
 }
 export function expectedVersion(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_INTEGER ? value : undefined;

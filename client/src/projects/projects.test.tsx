@@ -100,3 +100,68 @@ it('facade rejects malformed saved transport and suppresses cache commit when ca
   await context.api.read(12, controller.signal, () => true);
   expect(context.api.saved.getState().project).toBeNull(); context.model.dispose();
 });
+
+it('isolates model drafts, saved caches and listener disposal between instances', async () => {
+  const first = setup(); const second = setup(); form(first); form(second);
+  first.model.edit('name', 'First'); second.model.edit('name', 'Second');
+  first.model.dispose(); second.request.mockResolvedValueOnce(response());
+  second.model.submit(); await settle();
+  expect(first.model.store.getState().draft.name).toBe('First');
+  expect(first.api.saved.getState().project).toBeNull();
+  expect(second.api.saved.getState().project).toEqual(definition);
+  expect(second.request).toHaveBeenCalledOnce();
+  first.model.submit(); expect(first.request).not.toHaveBeenCalled();
+  second.model.dispose();
+});
+
+it('pause/resume keeps interrupted drafts without retriggering create on edits or completion', async () => {
+  const context = setup(); form(context);
+  let complete!: (value: Response) => void;
+  context.request.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  context.model.submit(); const signal = context.request.mock.calls[0]![1]!.signal!;
+  context.model.pause(); context.model.resume();
+  expect(signal.aborted).toBe(true);
+  expect(context.model.store.getState().fields._form).toContain('may already have saved');
+  context.model.edit('name', 'Kept after interruption');
+  complete(response()); await settle();
+  expect(context.request).toHaveBeenCalledOnce();
+  expect(context.model.store.getState().draft.name).toBe('Kept after interruption');
+  expect(context.api.saved.getState().project).toBeNull();
+  expect(context.history).not.toHaveBeenCalledWith('/projects/12');
+  context.request.mockResolvedValueOnce(response()); context.model.submit(); await settle();
+  expect(context.request).toHaveBeenCalledTimes(2); expect(context.model.store.getState().status).toBe('saved');
+  context.model.dispose();
+});
+
+it('resume restarts paused reads and disposed reads cannot update cache or status', async () => {
+  const context = setup('/projects/12'); let old!: (value: Response) => void;
+  context.request.mockImplementationOnce(() => new Promise(resolve => { old = resolve; }));
+  context.model.setActor(1); context.model.pause();
+  expect(context.request.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+  context.request.mockResolvedValueOnce(response(200)); context.model.resume(); await settle();
+  old(response(200, { ...definition, name: 'Stale' })); await settle();
+  expect(context.api.saved.getState().project).toEqual(definition);
+  expect(context.request).toHaveBeenCalledTimes(2);
+  context.request.mockImplementationOnce(() => new Promise(resolve => { old = resolve; }));
+  context.model.retryRead(); context.model.dispose(); const snapshot = context.model.store.getState();
+  expect(context.request.mock.calls[2]![1]!.signal!.aborted).toBe(true);
+  old(response(200)); await settle();
+  expect(context.api.saved.getState().project).toBeNull(); expect(context.model.store.getState()).toBe(snapshot);
+});
+
+it('never caches malformed or mismatched create/read definitions or stale guarded responses', async () => {
+  const context = setup(); const signal = new AbortController().signal;
+  for (const project of [{ ...definition, id: 13 }, { ...definition, version: 0 }, { ...definition, name: null }]) {
+    context.request.mockResolvedValueOnce(new Response(JSON.stringify({ project })));
+    await expect(context.api.read(12, signal, () => true)).rejects.toMatchObject({ kind: 'unavailable' });
+    expect(context.api.saved.getState().project).toBeNull();
+  }
+  for (const project of [{ ...definition, version: 2 }, { ...definition, id: 0 }, { ...definition, ownerId: 7 }]) {
+    context.request.mockResolvedValueOnce(new Response(JSON.stringify({ project }), { status: 201 }));
+    await expect(context.api.create(emptyDraft(), signal, () => true)).rejects.toMatchObject({ kind: 'unavailable' });
+    expect(context.api.saved.getState().project).toBeNull();
+  }
+  context.request.mockResolvedValueOnce(response(200));
+  await context.api.read(12, signal, () => false);
+  expect(context.api.saved.getState().project).toBeNull(); context.model.dispose();
+});

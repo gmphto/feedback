@@ -40,6 +40,29 @@ describe('authentication API facade', () => {
 });
 
 describe('authentication listener state', () => {
+  it('isolates listeners and subscriptions and ignores paused or disposed late completions', async () => {
+    const api = fakeApi(); const navigate = vi.fn();
+    let complete!: (url: string) => void;
+    let signal!: AbortSignal;
+    api.beginLogin = vi.fn<AuthApi['beginLogin']>(current => { signal = current; return new Promise(resolve => { complete = resolve; }); });
+    const first = createAuthModel(api, navigate);
+    const secondApi = fakeApi(); secondApi.currentSession = vi.fn(async () => ({ id: 2 }));
+    const second = createAuthModel(secondApi, () => {});
+    const observed = vi.fn(); const unsubscribe = second.store.subscribe(observed);
+    first.signIn(); first.pause(); expect(signal.aborted).toBe(true);
+    complete('https://identity.example/late'); await settle(); expect(navigate).not.toHaveBeenCalled();
+    first.signIn(); first.dispose(); expect(signal.aborted).toBe(true);
+    complete('https://identity.example/disposed');
+    const snapshot = first.store.getState();
+    second.refresh(); await settle();
+    expect(first.store.getState()).toBe(snapshot);
+    expect(second.store.getState().user).toEqual({ id: 2 });
+    expect(secondApi.currentSession).toHaveBeenCalledOnce();
+    expect(observed).toHaveBeenCalledTimes(2);
+    expect(navigate).not.toHaveBeenCalled();
+    first.signIn(); expect(api.beginLogin).toHaveBeenCalledTimes(2);
+    unsubscribe(); second.dispose();
+  });
   it('moves through signed-out, pending, signed-in and logout without provider tokens', async () => {
     const api = fakeApi(); const navigate = vi.fn(); const model = createAuthModel(api, navigate);
     model.refresh(); expect(model.store.getState().status).toBe('pending');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { expectedVersion, pathIdentifier, projectListOptions, projectName } from '../src/projects/policy.js';
+import { expectedVersion, pathIdentifier, projectListOptions, validateProjectName } from '../src/projects/policy.js';
 import { contextLimits, validateProjectInput } from '../src/projects/creation.js';
 
 test('project identifiers and versions use positive PostgreSQL integers without coercion', () => {
@@ -10,9 +10,15 @@ test('project identifiers and versions use positive PostgreSQL integers without 
   for (const value of ['1', 0, -1, 1.5, Infinity, 2147483648]) assert.equal(expectedVersion(value), undefined);
 });
 test('project names trim whitespace and enforce Unicode character length', () => {
-  assert.equal(projectName('  Clear scope \n'), 'Clear scope');
-  assert.equal(projectName('🙂'.repeat(200)), '🙂'.repeat(200));
-  for (const value of [undefined, '', ' \t\n', 'a'.repeat(201)]) assert.equal(projectName(value), undefined);
+  assert.deepEqual(validateProjectName('  Clear scope \n'), { valid: true, name: 'Clear scope' });
+  assert.deepEqual(validateProjectName('🙂'.repeat(200)), { valid: true, name: '🙂'.repeat(200) });
+  for (const value of [undefined, '', ' \t\n', '\0', 'a'.repeat(201), '🙂'.repeat(201)]) {
+    const name = validateProjectName(value);
+    assert.equal(name.valid, false);
+    const creation = validateProjectInput({ name: value });
+    assert.equal(creation.valid, false);
+    if (!name.valid && !creation.valid) assert.equal(creation.fields.name, name.message);
+  }
 });
 test('list filters stay literal with bounded canonical pagination and no extra fields', () => {
   assert.deepEqual(projectListOptions({}), { name: '', limit: 50, offset: 0 });

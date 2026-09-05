@@ -2,7 +2,7 @@ import type { FastifyError, FastifyInstance, FastifyRequest } from 'fastify';
 import { requireSession } from '../auth/routes.js';
 import type { AuthDependencies } from '../auth/service.js';
 import type { ProjectActor, ProjectModule } from './module.js';
-import { expectedVersion, pathIdentifier, projectListOptions, projectName } from './policy.js';
+import { expectedVersion, pathIdentifier, projectListOptions, validateProjectName } from './policy.js';
 import { contextLimits, creationSchema, validateProjectInput } from './creation.js';
 
 const error = (name: string) => ({ type: 'object', additionalProperties: false, required: ['error'], properties: { error: { type: 'string', const: name } } });
@@ -28,7 +28,10 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
     }
     return reply.code(503).send({ error: 'project_unavailable' });
   });
-  function module() { if (!projects) throw new Error('Unavailable project service'); return projects; }
+  function requireProjects() {
+    if (!projects) throw new Error('Unavailable project service');
+    return projects;
+  }
 
   app.post('/api/projects', {
     attachValidation: true,
@@ -36,7 +39,7 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
   }, async (request, reply) => {
     const validated = validateProjectInput(request.body);
     if (!validated.valid) return reply.code(400).send({ error: 'invalid_request', fields: validated.fields });
-    const project = await module().createDefinition(actors.get(request)!, validated.input);
+    const project = await requireProjects().createDefinition(actors.get(request)!, validated.input);
     return reply.code(201).header('location', `/api/projects/${project.id}/definition`).send({ project });
   });
   app.get<{ Params: { projectId: string } }>('/api/projects/:projectId/definition', {
@@ -44,7 +47,7 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
   }, async (request, reply) => {
     const id = pathIdentifier(request.params.projectId);
     if (!id) return reply.code(400).send({ error: 'invalid_request' });
-    const project = await module().readDefinition(actors.get(request)!, id);
+    const project = await requireProjects().readDefinition(actors.get(request)!, id);
     return project ? { project } : reply.code(404).send({ error: 'not_found' });
   });
 
@@ -54,14 +57,14 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
   }, async (request, reply) => {
     const options = projectListOptions(request.query);
     if (!options) return reply.code(400).send({ error: 'invalid_request' });
-    return { projects: await module().listProjects(actors.get(request)!, options) };
+    return { projects: await requireProjects().listProjects(actors.get(request)!, options) };
   });
   app.get<{ Params: { projectId: string } }>('/api/projects/:projectId', {
     schema: { params: params('projectId'), response: { 200: envelope, ...errors } },
   }, async (request, reply) => {
     const id = pathIdentifier(request.params.projectId);
     if (!id) return reply.code(400).send({ error: 'invalid_request' });
-    const project = await module().readProject(actors.get(request)!, id);
+    const project = await requireProjects().readProject(actors.get(request)!, id);
     return project ? { project } : reply.code(404).send({ error: 'not_found' });
   });
   app.patch<{ Params: { projectId: string }; Body: { name: string; expectedVersion: number } }>('/api/projects/:projectId', {
@@ -69,10 +72,10 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
       response: { 200: envelope, ...errors, 409: { type: 'object', additionalProperties: false, required: ['error', 'project'], properties: { error: { type: 'string', const: 'conflict' }, project } } } },
   }, async (request, reply) => {
     const id = pathIdentifier(request.params.projectId);
-    const name = projectName(request.body.name);
+    const name = validateProjectName(request.body.name);
     const version = expectedVersion(request.body.expectedVersion);
-    if (!id || !name || !version) return reply.code(400).send({ error: 'invalid_request' });
-    const result = await module().renameProject(actors.get(request)!, id, name, version);
+    if (!id || !name.valid || !version) return reply.code(400).send({ error: 'invalid_request' });
+    const result = await requireProjects().renameProject(actors.get(request)!, id, name.name, version);
     if (result.outcome === 'not_found') return reply.code(404).send({ error: 'not_found' });
     if (result.outcome === 'conflict') return reply.code(409).send({ error: 'conflict', project: result.project });
     return { project: result.project };
@@ -82,9 +85,10 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
       type: 'object', additionalProperties: false, required: ['featureArea'], properties: { featureArea: { type: 'object', additionalProperties: false, required: ['id', 'projectId'], properties: { id: { type: 'integer' }, projectId: { type: 'integer' } } } },
     } } },
   }, async (request, reply) => {
-    const projectId = pathIdentifier(request.params.projectId); const areaId = pathIdentifier(request.params.featureAreaId);
+    const projectId = pathIdentifier(request.params.projectId);
+    const areaId = pathIdentifier(request.params.featureAreaId);
     if (!projectId || !areaId) return reply.code(400).send({ error: 'invalid_request' });
-    const featureArea = await module().readFeatureArea(actors.get(request)!, projectId, areaId);
+    const featureArea = await requireProjects().readFeatureArea(actors.get(request)!, projectId, areaId);
     return featureArea ? { featureArea } : reply.code(404).send({ error: 'not_found' });
   });
   app.get<{ Params: { projectId: string; featureAreaId: string; featureId: string } }>('/api/projects/:projectId/feature-areas/:featureAreaId/features/:featureId', {
@@ -92,9 +96,11 @@ export async function registerProjectRoutes(app: FastifyInstance, auth?: AuthDep
       type: 'object', additionalProperties: false, required: ['feature'], properties: { feature: { type: 'object', additionalProperties: false, required: ['id', 'featureAreaId'], properties: { id: { type: 'integer' }, featureAreaId: { type: 'integer' } } } },
     } } },
   }, async (request, reply) => {
-    const projectId = pathIdentifier(request.params.projectId); const areaId = pathIdentifier(request.params.featureAreaId); const featureId = pathIdentifier(request.params.featureId);
+    const projectId = pathIdentifier(request.params.projectId);
+    const areaId = pathIdentifier(request.params.featureAreaId);
+    const featureId = pathIdentifier(request.params.featureId);
     if (!projectId || !areaId || !featureId) return reply.code(400).send({ error: 'invalid_request' });
-    const feature = await module().readFeature(actors.get(request)!, projectId, areaId, featureId);
+    const feature = await requireProjects().readFeature(actors.get(request)!, projectId, areaId, featureId);
     return feature ? { feature } : reply.code(404).send({ error: 'not_found' });
   });
 }

@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
 import { test, type TestContext } from 'node:test';
 import { sql } from 'kysely';
-import { createDatabase } from '../../src/db/database.js';
-import { readDatabaseConfiguration } from '../../src/db/configuration.js';
+import { isolated } from '../support/database.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { createAuthRepository, opaqueIdentifier } from '../../src/auth/repository.js';
 import { buildApp } from '../../src/app.js';
@@ -11,24 +9,9 @@ import { buildProductionApp } from '../../src/production-app.js';
 import { fakeProvider, type ProviderMode } from '../support/oidc-provider.js';
 import { LOGIN_LIFETIME_MS, SESSION_LIFETIME_MS } from '../../src/auth/policy.js';
 
-const config = readDatabaseConfiguration(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL');
-if (!config.valid) throw new Error(config.message);
-const testUrl = config.connectionString;
-
 async function setup(t: TestContext, secure = false) {
-  const admin = createDatabase(testUrl);
-  const name = `scope_test_${Date.now()}_${randomBytes(6).toString('hex')}`;
-  let created = false;
-  let db: ReturnType<typeof createDatabase> | undefined;
-  t.after(async () => {
-    await db?.destroy();
-    try { if (created) await sql`drop database ${sql.id(name)}`.execute(admin); }
-    finally { await admin.destroy(); }
-  });
-  await sql`create database ${sql.id(name)}`.execute(admin); created = true;
-  const url = new URL(testUrl); url.pathname = `/${name}`;
-  db = createDatabase(url.href);
-  assert.equal(await runMigrations(url.href), 0);
+  const { db, url } = await isolated(t);
+  assert.equal(await runMigrations(url), 0);
   const provider = await fakeProvider(t, secure);
   let now = new Date();
   const repository = createAuthRepository(db, () => now);

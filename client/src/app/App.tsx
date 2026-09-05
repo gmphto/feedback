@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useStore } from 'zustand';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createAuthApi } from '../auth/api';
 import { createAuthModel, observeSession, type AuthModel } from '../auth/model';
 import { createProjectApi } from '../projects/api';
@@ -7,7 +6,7 @@ import { createProjectModel } from '../projects/model';
 import { ProjectView } from '../projects/ProjectView';
 
 export function AuthView({ model }: { model: AuthModel }) {
-  const state = useStore(model.store);
+  const state = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
   return <section aria-labelledby="session-heading">
     <h2 id="session-heading" className="mt-8 text-lg font-semibold">Your application session</h2>
     <div aria-live="polite" className="my-4 min-h-12">
@@ -30,7 +29,7 @@ export default function App() {
   const [model] = useState(() => createAuthModel(createAuthApi(), url => window.location.assign(url),
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('authError') === '1'));
   const [projects] = useState(() => createProjectModel(createProjectApi(), path => window.history.pushState({}, '', path), () => model.cancel(), typeof window === 'undefined' ? '/' : window.location.pathname));
-  const authentication = useStore(model.store);
+  const authentication = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
   useEffect(() => observeSession(model, window), [model]);
   useEffect(() => {
     const sync = () => {

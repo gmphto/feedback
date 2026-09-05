@@ -1,6 +1,6 @@
 import { sql } from 'kysely';
 import type { createDatabase } from '../db/database.js';
-import { projectName, type ProjectListOptions } from './policy.js';
+import { validateProjectName, type ProjectListOptions } from './policy.js';
 import { validateProjectInput, type ProjectInput } from './creation.js';
 
 export type ProjectActor = { id: number };
@@ -9,7 +9,7 @@ export type ProjectDefinition = Project & ProjectInput;
 const definitionColumns = sql`id, name, version, rough_idea as "roughIdea", primary_user as "primaryUser",
   core_job as "coreJob", main_problem as "mainProblem", mvp_outcome as "mvpOutcome",
   initial_product_areas as "initialProductAreas", constraints`;
-export type RenameResult = { outcome: 'saved' | 'conflict'; project: Project } | { outcome: 'not_found' };
+type RenameResult = { outcome: 'saved' | 'conflict'; project: Project } | { outcome: 'not_found' };
 
 // This is the complete production project persistence surface. The database is
 // closure-owned; no unscoped lookup/update or arbitrary SQL callback is exposed.
@@ -27,13 +27,6 @@ export function createProjectModule(db: ReturnType<typeof createDatabase>) {
     async readDefinition(actor: ProjectActor, id: number): Promise<ProjectDefinition | undefined> {
       return (await sql<ProjectDefinition>`select ${definitionColumns} from projects where id = ${id} and owner_id = ${actor.id}`.execute(db)).rows[0];
     },
-    async createProject(actor: ProjectActor, inputName: string): Promise<Project> {
-      const name = projectName(inputName);
-      if (!name) throw new Error('Invalid project name');
-      const result = await sql<Project>`insert into projects (owner_id, name)
-        values (${actor.id}, ${name}) returning id, name, version`.execute(db);
-      return result.rows[0]!;
-    },
     async readProject(actor: ProjectActor, id: number): Promise<Project | undefined> {
       return (await sql<Project>`select id, name, version from projects where id = ${id} and owner_id = ${actor.id}`.execute(db)).rows[0];
     },
@@ -43,8 +36,9 @@ export function createProjectModule(db: ReturnType<typeof createDatabase>) {
         order by name asc, id asc limit ${options.limit} offset ${options.offset}`.execute(db)).rows;
     },
     async renameProject(actor: ProjectActor, id: number, inputName: string, expectedVersion: number): Promise<RenameResult> {
-      const name = projectName(inputName);
-      if (!name) throw new Error('Invalid project name');
+      const validated = validateProjectName(inputName);
+      if (!validated.valid) throw new Error('Invalid project name');
+      const name = validated.name;
       return db.transaction().execute(async transaction => {
         // Lock only an owner-scoped row. Authorization, conflict representation
         // and conditional mutation stay in the same serialized transaction.
