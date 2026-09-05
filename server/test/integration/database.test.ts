@@ -9,6 +9,8 @@ import { createDatabase } from '../../src/db/database.js';
 import { readDatabaseConfiguration } from '../../src/db/configuration.js';
 import { migrationProvider } from '../../src/db/migrations.js';
 import { buildProductionApp } from '../../src/production-app.js';
+import { createAuthRepository, identifierDigest, opaqueIdentifier } from '../../src/auth/repository.js';
+import { LOGIN_LIFETIME_MS, SESSION_LIFETIME_MS } from '../../src/auth/policy.js';
 
 const config = readDatabaseConfiguration(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL');
 if (!config.valid) throw new Error(config.message);
@@ -60,7 +62,7 @@ function responseShape(response: {statusCode: number; headers: Record<string, un
   assert.deepEqual(JSON.parse(response.body), { status: ready ? 'ready' : 'not_ready' });
 }
 
-test('empty database migrates once, records only metadata, and readiness recovers without restart', async t => {
+test('empty database migrates once, creates expected tables, and readiness recovers without restart', async t => {
   const { db, url } = await isolated(t);
   const app = buildProductionApp(url);
   try {
@@ -70,11 +72,79 @@ test('empty database migrates once, records only metadata, and readiness recover
     const initial = await history(db);
     assert.deepEqual(initial.map(row => row.name), Object.keys(await migrationProvider.getMigrations()));
     const tables = (await sql<{ tablename: string }>`select tablename from pg_tables where schemaname='public' order by tablename`.execute(db)).rows.map(row => row.tablename);
-    assert.deepEqual(tables, ['kysely_migration', 'kysely_migration_lock']);
+    assert.deepEqual(tables, ['application_sessions', 'kysely_migration', 'kysely_migration_lock', 'login_transactions', 'users']);
     responseShape(await app.inject('/api/ready'), true);
     assert.equal((await command(url)).code, 0);
     assert.deepEqual(await history(db), initial);
   } finally { await app.close(); }
+});
+
+test('concurrent verified identities share an integer user and persist only session digests', async t => {
+  const { db, url } = await isolated(t);
+  assert.equal((await command(url)).code, 0);
+  const now = new Date('2026-09-05T12:00:00Z');
+  const repository = createAuthRepository(db, () => now);
+  const sessions = await Promise.all(Array.from({ length: 8 }, () => repository.createSession({ issuer: 'https://identity.example/', subject: 'alice' })));
+  assert.ok(Number.isInteger(sessions[0]!.user.id));
+  assert.equal(new Set(sessions.map(session => session.user.id)).size, 1);
+  assert.equal(new Set(sessions.map(session => session.identifier)).size, 8);
+  const rows = (await sql<{ digest: string; expires_at: Date; revoked_at: Date | null }>`select * from application_sessions`.execute(db)).rows;
+  assert.equal(rows.length, 8);
+  assert.deepEqual(new Set(rows.map(row => row.digest)), new Set(sessions.map(session => identifierDigest(session.identifier))));
+  for (const row of rows) {
+    assert.equal(row.expires_at.getTime(), now.getTime() + SESSION_LIFETIME_MS);
+    assert.equal(row.revoked_at, null);
+    for (const session of sessions) assert.ok(!JSON.stringify(row).includes(session.identifier));
+  }
+  const otherIssuer = await repository.createSession({ issuer: 'https://other.example/', subject: 'alice' });
+  assert.notEqual(otherIssuer.user.id, sessions[0]!.user.id);
+});
+
+test('sessions have fixed absolute expiry and revoked cookies cannot be replayed', async t => {
+  const { db, url } = await isolated(t);
+  assert.equal((await command(url)).code, 0);
+  let now = new Date('2026-09-05T12:00:00Z');
+  const repository = createAuthRepository(db, () => now);
+  const session = await repository.createSession({ issuer: 'https://identity.example/', subject: 'alice' });
+  for (const invalid of [undefined, '', 'malformed', opaqueIdentifier()]) assert.equal(await repository.findSession(invalid), undefined);
+  now = new Date(session.expiresAt.getTime() - 1);
+  assert.deepEqual(await repository.findSession(session.identifier), session.user);
+  now = session.expiresAt;
+  assert.equal(await repository.findSession(session.identifier), undefined);
+  const fresh = await repository.createSession({ issuer: 'https://identity.example/', subject: 'alice' });
+  await repository.revokeSession(fresh.identifier);
+  await repository.revokeSession(fresh.identifier);
+  await repository.revokeSession(undefined);
+  assert.equal(await repository.findSession(fresh.identifier), undefined);
+});
+
+test('login transactions bind the browser, expire at the boundary, and are consumed exactly once', async t => {
+  const { db, url } = await isolated(t);
+  assert.equal((await command(url)).code, 0);
+  let now = new Date('2026-09-05T12:00:00Z');
+  const repository = createAuthRepository(db, () => now);
+  const browser = opaqueIdentifier();
+  const login = await repository.startLogin(browser, 'nonce', 'pkce-verifier', '//unsafe.example');
+  assert.equal(login.expiresAt.getTime(), now.getTime() + LOGIN_LIFETIME_MS);
+  assert.equal(await repository.consumeLogin(login.state, opaqueIdentifier()), undefined);
+  assert.equal(await repository.consumeLogin('malformed', browser), undefined);
+  const attempts = await Promise.all(Array.from({ length: 8 }, () => repository.consumeLogin(login.state, browser)));
+  assert.deepEqual(attempts.filter(Boolean), [{ nonce: 'nonce', verifier: 'pkce-verifier', returnPath: '/' }]);
+  assert.equal(await repository.consumeLogin(login.state, browser), undefined);
+  const expired = await repository.startLogin(browser, 'nonce', 'verifier', '/projects');
+  now = expired.expiresAt;
+  assert.equal(await repository.consumeLogin(expired.state, browser), undefined);
+  assert.equal((await sql`select * from application_sessions`.execute(db)).rows.length, 0);
+});
+
+test('session persistence failure rolls back the new local identity and returns no session', async t => {
+  const { db, url } = await isolated(t);
+  assert.equal((await command(url)).code, 0);
+  const repository = createAuthRepository(db);
+  await sql`alter table application_sessions add constraint simulate_unavailable check (false)`.execute(db);
+  await assert.rejects(repository.createSession({ issuer: 'https://identity.example/', subject: 'alice' }));
+  assert.equal((await sql`select * from users`.execute(db)).rows.length, 0);
+  assert.equal((await sql`select * from application_sessions`.execute(db)).rows.length, 0);
 });
 
 test('failed migration rolls back its table and migration history and exits nonzero', async t => {

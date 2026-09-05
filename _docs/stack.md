@@ -11,3 +11,5 @@ Keep domain rules outside React and HTTP handlers, and deterministic decisions s
 AI output is untrusted: validate it before creating drafts or proposals, and never let it directly mutate approved scope or calculate health. Use Server-Sent Events for AI response streaming. Do not add WebSockets, microservices, brokers, graph databases, or vector databases without new evidence.
 
 Provider and hosting configuration belongs to later issues. Archived stack statements do not authorize additional tools or dependencies.
+
+Authentication persistence uses integer users unique by issuer and subject, SHA-256 digests of cryptographically random session identifiers, and browser-bound login transactions consumed with atomic DELETE RETURNING. Identity upsert and session insert share a database transaction. Absolute session expiry is eight hours; login transactions expire after ten minutes, using an injected clock. The maintained OIDC adapter, cookie integration and authentication UI are still pending dependency approval and implementation.

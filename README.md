@@ -91,6 +91,13 @@ credentials. Environment variables must be set in the process environment;
 there is no `.env` loader. The migration command uses ordered immutable files
 under `server/src/db/migrations`; never modify an already-applied migration.
 The initial migration creates only Kysely metadata, with no product tables.
+The second migration adds local identities, digest-only application sessions,
+and browser-bound, single-use login transactions. This persistence foundation
+is not yet connected to authentication routes or a login UI. Session expiry is
+fixed at eight hours (no sliding renewal); login transactions expire after ten
+minutes. Both reject access at the expiry boundary. Provider verification must
+succeed before creating a session, and persistence must commit before issuing
+a cookie. No live Auth0 smoke test has been performed for this foundation.
 Repeated migrations are safe. Kysely serializes migrations using its PostgreSQL
 locking and transactions; failure returns a sanitized nonzero result and rolls
 back the failed migration.
