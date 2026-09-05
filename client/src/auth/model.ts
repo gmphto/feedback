@@ -50,7 +50,19 @@ export function createAuthModel(api: AuthApi, navigate: (url: string) => void, f
       version++; controller?.abort();
       store.setState(draft => { draft.user = null; draft.status = 'signed-out'; draft.operation = null; });
     },
+    pause() { version++; controller?.abort(); },
     dispose() { controller?.abort(); unsubscribe(); },
   };
 }
 export type AuthModel = ReturnType<typeof createAuthModel>;
+
+// React may replay effect setup/cleanup in StrictMode. Cleanup cancels effects,
+// not the user's visible outcome; only explicit commands dismiss a failure.
+export function observeSession(model: AuthModel, target: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>) {
+  const refresh = () => {
+    if (model.store.getState().status !== 'failure') model.refresh();
+  };
+  refresh();
+  target.addEventListener('focus', refresh);
+  return () => { model.pause(); target.removeEventListener('focus', refresh); };
+}

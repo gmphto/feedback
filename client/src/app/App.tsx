@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { createAuthApi } from '../auth/api';
-import { createAuthModel, type AuthModel } from '../auth/model';
+import { createAuthModel, observeSession, type AuthModel } from '../auth/model';
 
 export function AuthView({ model }: { model: AuthModel }) {
   const state = useStore(model.store);
@@ -26,12 +26,7 @@ export function AuthView({ model }: { model: AuthModel }) {
 export default function App() {
   const [model] = useState(() => createAuthModel(createAuthApi(), url => window.location.assign(url),
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('authError') === '1'));
-  useEffect(() => {
-    if (model.store.getState().status !== 'failure') model.refresh();
-    const refresh = () => model.refresh();
-    window.addEventListener('focus', refresh);
-    return () => { model.cancel(); window.removeEventListener('focus', refresh); };
-  }, [model]);
+  useEffect(() => observeSession(model, window), [model]);
   return (
     <main className="mx-auto max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
       <h1>Project Scope Tool</h1>

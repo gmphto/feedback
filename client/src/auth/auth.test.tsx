@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { createAuthApi, type AuthApi } from './api';
-import { createAuthModel } from './model';
+import { createAuthModel, observeSession } from './model';
 import { AuthView } from '../app/App';
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -81,5 +81,32 @@ describe('authentication listener state', () => {
     expect(markup).toContain('aria-live="polite"'); expect(markup).toContain('<button');
     expect(markup).toContain('Try sign-in again'); expect(markup).toContain('role="alert"');
     expect(markup).toContain('Check session again'); model.dispose();
+  });
+  it('StrictMode effect replay and focus preserve callback failure until explicit retry', async () => {
+    const api = fakeApi(); api.currentSession = vi.fn(async () => null);
+    const model = createAuthModel(api, () => {}, true);
+    const browser = new EventTarget();
+    // This is the exact setup/cleanup function used by App's React effect.
+    const firstCleanup = observeSession(model, browser); firstCleanup();
+    const cleanup = observeSession(model, browser);
+    browser.dispatchEvent(new Event('focus')); await settle();
+    expect(api.currentSession).not.toHaveBeenCalled();
+    expect(model.store.getState().status).toBe('failure');
+    expect(renderToStaticMarkup(<AuthView model={model} />)).toContain('Try sign-in again');
+    model.refresh(); await settle();
+    expect(api.currentSession).toHaveBeenCalledOnce();
+    expect(model.store.getState().status).toBe('signed-out');
+    cleanup(); model.dispose();
+  });
+  it('effect replay restarts pending checks and focus still invalidates a signed-in session on 401', async () => {
+    const api = fakeApi(); api.currentSession = async () => ({ id: 5 });
+    const model = createAuthModel(api, () => {}); const browser = new EventTarget();
+    observeSession(model, browser)();
+    const cleanup = observeSession(model, browser); await settle();
+    expect(model.store.getState().status).toBe('signed-in');
+    api.currentSession = async () => null;
+    browser.dispatchEvent(new Event('focus')); await settle();
+    expect(model.store.getState().status).toBe('signed-out');
+    expect(model.store.getState().user).toBeNull(); cleanup(); model.dispose();
   });
 });
