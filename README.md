@@ -131,6 +131,64 @@ with a setup message instead of skipping coverage.
 integration tests. `pnpm --filter server exec tsx --test test/readiness.test.ts`
 still runs the isolated injected API coverage without PostgreSQL.
 
+## Project ownership API
+
+Migration `0003_project_ownership` adds integer projects with an owner foreign
+key, nonblank name (maximum 200 characters) and version initially 1. Minimal
+feature-area/project and feature/feature-area foreign keys establish the actual
+nested membership structure; later issues add product fields and workflows.
+Apply migrations with `pnpm --filter server db:migrate` before using the API.
+
+All project operations resolve the actor through the existing application
+session guard. The server project module requires that actor for every query
+and command and applies owner predicates in SQL. Nested reads constrain the
+entire actual parent chain in the same query, even when all mismatched resources
+belong to the same user. Production handlers cannot access an unscoped project
+lookup/update or arbitrary database callback. Tests may seed relational fixtures
+directly in their isolated databases.
+
+| Route | Owner response |
+| --- | --- |
+| `GET /api/projects/:projectId` | `{ "project": { "id": 1, "name": "Scope", "version": 1 } }` |
+| `GET /api/projects` | `{ "projects": [...] }` using the same representation |
+| `PATCH /api/projects/:projectId` | Same project envelope with the saved name and incremented version |
+| `GET /api/projects/:projectId/feature-areas/:featureAreaId` | `{ "featureArea": { "id": 1, "projectId": 1 } }` |
+| `GET /api/projects/:projectId/feature-areas/:featureAreaId/features/:featureId` | `{ "feature": { "id": 1, "featureAreaId": 1 } }` |
+
+PATCH accepts exactly `{ "name": "New name", "expectedVersion": 1 }`. It trims
+the name, validates it, and increments version once inside an owner-scoped
+transaction. A stale owner write returns 409
+`{ "error": "conflict", "project": { "id": 1, "name": "Saved name", "version": 2 } }`
+without changing data. Missing/foreign resources and parent mismatches return
+the identical 404 `{ "error": "not_found" }`; foreign actors never see a
+conflict representation. Submitted owner IDs, identity fields and extra PATCH
+fields are rejected rather than silently removed. An internal create command
+sets the owner from its actor; there is no public creation endpoint or UI yet.
+
+Lists accept only optional `name` (case-insensitive literal substring, at most
+200 characters), `limit` (1–100, default 50), and `offset` (nonnegative safe
+integer, default 0). Ownership and filtering apply before name-then-ID ascending
+ordering and pagination. `%` and `_` are literal search characters. Path IDs
+are canonical positive decimals in PostgreSQL's integer range.
+
+Authentication runs before resource validation. Missing/invalid sessions return
+the existing 401, and unavailable auth returns its existing sanitized 503.
+Unsafe methods require exact application Origin before authentication, so even
+an unauthenticated cross-site PATCH returns 403 without mutation. Authenticated
+invalid IDs, names, versions, list parameters or extra fields return 400
+`{ "error": "invalid_request" }` independently of resource existence. A project
+database failure returns 503 `{ "error": "project_unavailable" }`. Protected
+project responses use `Cache-Control: no-store`.
+
+Real PostgreSQL/Fastify tests exercise two users, same-owner projects, multiple
+areas within one project, cross-owner and same-owner parent swaps, forged
+ownership, unchanged rejected writes and concurrent expected-version conflicts.
+Run focused policy tests with
+`pnpm --filter server exec tsx --test test/project-policy.test.ts`, then supply
+`TEST_DATABASE_URL` and run
+`pnpm --filter server exec tsx --test test/integration/projects.test.ts` before
+the full test/build commands.
+
 ## Auth0 authentication
 
 Fastify owns OIDC Authorization Code with PKCE S256, callback verification,

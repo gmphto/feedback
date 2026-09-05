@@ -5,6 +5,7 @@ import { readAuthConfiguration, type AuthEnvironment } from './auth/configuratio
 import { createAuthRepository } from './auth/repository.js';
 import { createOidcProvider } from './auth/oidc.js';
 import type { AuthDependencies } from './auth/service.js';
+import { createProjectModule } from './projects/module.js';
 
 export function buildProductionApp(databaseUrl: string | undefined, environment: AuthEnvironment = process.env) {
   const readiness = createDatabaseReadiness(databaseUrl);
@@ -18,7 +19,7 @@ export function buildProductionApp(databaseUrl: string | undefined, environment:
       auth = { configuration: configuration.configuration, repository: createAuthRepository(db), provider: createOidcProvider(configuration.configuration) };
     }
   } catch { /* Invalid driver-specific settings leave authentication unavailable. */ }
-  const app = buildApp({ readinessCheck: readiness.check, auth });
+  const app = buildApp({ readinessCheck: readiness.check, auth, projects: db ? createProjectModule(db) : undefined });
   app.addHook('onClose', readiness.close);
   app.addHook('onClose', async () => { await db?.destroy(); });
   return app;

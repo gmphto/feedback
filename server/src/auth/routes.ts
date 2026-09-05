@@ -26,7 +26,7 @@ export async function requireSession(request: FastifyRequest, reply: FastifyRepl
 export async function registerAuth(app: FastifyInstance, auth?: AuthDependencies) {
   await app.register(cookie);
   app.addHook('onRequest', async (request, reply) => {
-    if (request.url.startsWith('/auth/') || request.url.startsWith('/api/session')) reply.header('cache-control', 'no-store');
+    if (request.url.startsWith('/auth/') || request.url.startsWith('/api/session') || request.url.startsWith('/api/projects')) reply.header('cache-control', 'no-store');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
       && (!auth || !allowsBrowserMutation(request.headers.origin, auth.configuration.applicationOrigin))) {
       return reply.code(403).send({ error: 'forbidden' });

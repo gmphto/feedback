@@ -4,18 +4,24 @@ import { getReadiness } from './readiness.js';
 import type { ReadinessCheck } from './readiness.js';
 import { registerAuth } from './auth/routes.js';
 import type { AuthDependencies } from './auth/service.js';
+import { registerProjectRoutes } from './projects/routes.js';
+import type { ProjectModule } from './projects/module.js';
 
-export function buildApp(options: { readinessCheck?: ReadinessCheck; auth?: AuthDependencies; logStream?: { write(message: string): void } } = {}) {
+export function buildApp(options: { readinessCheck?: ReadinessCheck; auth?: AuthDependencies; projects?: ProjectModule; logStream?: { write(message: string): void } } = {}) {
   // Framework request/error logs may include callback query strings and provider
   // payloads. Emit only registered route names and status codes at this boundary.
   const app = Fastify({
     logger: options.logStream ? { stream: options.logStream } : true,
     logController: new LogController({ disableRequestLogging: true }),
+    ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
   });
   app.addHook('onResponse', async (request, reply) => {
     request.log.info({ route: request.routeOptions.url ?? 'unmatched', statusCode: reply.statusCode }, 'request completed');
   });
-  app.register(async scoped => { await registerAuth(scoped, options.auth); });
+  app.register(async scoped => {
+    await registerAuth(scoped, options.auth);
+    scoped.register(async projectRoutes => { await registerProjectRoutes(projectRoutes, options.auth, options.projects); });
+  });
 
   app.get('/api/ready', {
     schema: {

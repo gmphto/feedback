@@ -72,7 +72,7 @@ test('empty database migrates once, creates expected tables, and readiness recov
     const initial = await history(db);
     assert.deepEqual(initial.map(row => row.name), Object.keys(await migrationProvider.getMigrations()));
     const tables = (await sql<{ tablename: string }>`select tablename from pg_tables where schemaname='public' order by tablename`.execute(db)).rows.map(row => row.tablename);
-    assert.deepEqual(tables, ['application_sessions', 'kysely_migration', 'kysely_migration_lock', 'login_transactions', 'users']);
+    assert.deepEqual(tables, ['application_sessions', 'feature_areas', 'features', 'kysely_migration', 'kysely_migration_lock', 'login_transactions', 'projects', 'users']);
     responseShape(await app.inject('/api/ready'), true);
     assert.equal((await command(url)).code, 0);
     assert.deepEqual(await history(db), initial);
