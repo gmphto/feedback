@@ -1,11 +1,6 @@
-import type { DashboardState } from "../dashboard/state/state"
-import type { EditorState } from "../editor/state/state"
-
-const initialState: ProjectState = {
-  view: 'dashboard',
-  dashboard: {},
-  editor: { activeKey: undefined, original: undefined, draft: undefined },
-};
+import { createInitialDashboardState, type DashboardState } from "../dashboard/state/state"
+import { createInitialEditorState, type EditorState } from "../editor/state/state"
+import type { Project } from "../types/project";
 
 /**
  * The state of the project, which can be either in the dashboard view or the editor view.
@@ -19,6 +14,10 @@ export interface ProjectState {
      */
     view: "dashboard" | "editor"
 
+    /** All Projects */
+    // Its possible we will duplicate ownership here with rtk 
+    // And redux state
+    projects: Project[]
 
     /**
      * The state of the dashboard view, if the current view is "dashboard".
@@ -35,10 +34,11 @@ export interface ProjectState {
 
 /**
  * 
- * @returns 
+ * @returns The initial state for the project slice.
  */
 export const createInitialState = (): ProjectState => ({
     view: 'dashboard',
-    dashboard: {},
-    editor: { activeKey: undefined, original: undefined, draft: undefined },
+    projects: [],
+    dashboard: createInitialDashboardState(),
+    editor: createInitialEditorState(),
 });

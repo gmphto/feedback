@@ -1,6 +1,9 @@
 import { type PayloadAction } from '@reduxjs/toolkit';
 import type { ProjectState } from './state';
 import type { Project } from '../types/project';
+import { handleOpenEditor } from './handlers/handleOpenEditor';
+import { handleStartCreateNewProject } from '../editor/state/handlers/handleStartCreateNewProject';
+import { handleStartEditProject } from '../editor/state/handlers/handleStartEditProject';
 
 interface StartEditPayload {
 
@@ -16,14 +19,15 @@ export const projectReducer = {
     startCreate: (
         state: ProjectState,
         {
-            payload: { readOnlySession, userInfo },
+            payload: { readOnlySession },
         }: PayloadAction<{
             readOnlySession: boolean;
-            userInfo: UserInfo;
         }>
     ) => {
-        const {} = state;
-        handleOpenEditor(state, { isNew: true, isReadOnly: readOnlySession });
+        handleOpenEditor(
+            state, 
+            handleStartCreateNewProject(state.editor, readOnlySession)
+        );
     },
 
     startEdit: (
@@ -32,22 +36,19 @@ export const projectReducer = {
             payload: { projectToOpen, readOnlySession },
         }: PayloadAction<StartEditPayload>
     ) => {
-        const {} = state;
-        handleOpenEditor(state, { ...projectToOpen, isNew: false, isReadOnly: readOnlySession });
+        handleOpenEditor(
+            state, 
+            handleStartEditProject(state.editor, projectToOpen, readOnlySession)
+        );
     },
 
-    stopEdit: (state: ProjectState) => {
-        state.view = 'dashboard';
-        state.editor = { activeKey: undefined, original: undefined, draft: undefined };
-    },
-
-    startCopy: (
-        state: ProjectState,
-        {
-            payload: { projectToOpen, readOnlySession },
-        }: PayloadAction<StartEditPayload>
-    ) => {
-        const {} = state;
-        handleOpenEditor(state, { ...projectToOpen, isNew: true, isReadOnly: readOnlySession });
-    },
+    // startCopy: (
+    //     state: ProjectState,
+    //     {
+    //         payload: { projectToOpen, readOnlySession },
+    //     }: PayloadAction<StartEditPayload>
+    // ) => {
+    //     const {} = state;
+    //     handleOpenEditor(state, handleStartCopyProject(state.editor, projectToOpen, readOnlySession));
+    // },
 }

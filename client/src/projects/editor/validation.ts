@@ -1,3 +1,5 @@
+import type { ProjectDraft } from "./types/projectDraft";
+
 /**
  * Declarative validator for project
  */

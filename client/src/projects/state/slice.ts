@@ -1,7 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit'
 import { projectReducer } from './reducer';
 import { createInitialState } from './state';
-import { refreshAsync } from './actions';
 
 export const slice = createSlice({
 
@@ -13,11 +12,12 @@ export const slice = createSlice({
         ...projectReducer
     },
 
-    extraReducers: (builder) => (
-        builder.addCase(refreshAsync.fulfilled, (state, action) => {
-            state.projects = action.payload.projects;
-        })
-    ),
+    /** this is not needed, using rtk query which will own refresh logic */
+    // extraReducers: (builder) => (
+    //     builder.addCase(refreshAsync.fulfilled, (state, action) => {
+    //         state.projects = action.payload.projects;
+    //     })
+    // ),
 
 })
 

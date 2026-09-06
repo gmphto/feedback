@@ -9,17 +9,17 @@ export interface Project {
     /**
      * The unique identifier for the project.
      */
-    projectId: number;
+    projectId?: number;
 
     /**
      * The name of the project. This field is required and should be a non-empty string.
      */
-    name: string;
+    name?: string;
 
     /**
      * The project number. This field is optional and can be left empty.
      */
-    projectNumber?: string;
+    projectNumber?: number;
 
     /**
      * A brief description of the project.
