@@ -6,7 +6,10 @@ export const selectActiveId = (state: RootState) =>
   state.project.editor.activeKey;
 
 /**
- * Equivalent of original in editorState
+ * Save action
+  → refresh/refetch updates the cache
+  → selectSavedEditorProject reads the updated cache
+  → subscribed component re-renders
  */
 export const selectEditorProject = createSelector(
   [

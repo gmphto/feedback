@@ -133,3 +133,4 @@ describe('authentication listener state', () => {
     expect(model.store.getState().user).toBeNull(); cleanup(); model.dispose();
   });
 });
+

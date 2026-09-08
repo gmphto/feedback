@@ -1,4 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { ConfirmationDialog } from '../providers/confirmation';
+import { useNotificationProvider } from '../providers/notification';
+import { requestSignOut, type SignOutRequest } from '../auth/signOut';
+import { signOutConfirmation } from '../auth/signOutConfirmation';
 import { createAuthApi } from '../auth/api';
 import { createAuthModel, observeSession, type AuthModel } from '../auth/model';
 import { createProjectApi } from '../projects/api';
@@ -6,7 +10,29 @@ import { createProjectModel } from '../projects/model';
 import { ProjectView } from '../projects/ProjectView';
 
 export function AuthView({ model }: { model: AuthModel }) {
+  const [signOutRequest, setSignOutRequest] = useState<SignOutRequest | null>(null);
   const state = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
+
+  function openSignOutDialog() {
+    const snapshot = model.store.getState();
+    if (snapshot.status !== 'signed-in') {
+      return;
+    }
+
+    setSignOutRequest({ snapshot, generation: model.getGeneration() });
+  }
+
+  function cancelSignOut() {
+    setSignOutRequest(null);
+  }
+
+  function confirmSignOut() {
+    setSignOutRequest(null);
+    if (signOutRequest) {
+      requestSignOut(model, signOutRequest);
+    }
+  }
+
   return <section aria-labelledby="session-heading">
     <h2 id="session-heading" className="mt-8 text-lg font-semibold">Your application session</h2>
     <div aria-live="polite" className="my-4 min-h-12">
@@ -17,17 +43,27 @@ export function AuthView({ model }: { model: AuthModel }) {
     </div>
     <div className="flex flex-wrap gap-3">
       {state.status === 'signed-out' && <button onClick={model.signIn}>Sign in</button>}
-      {state.status === 'signed-in' && <button onClick={model.signOut}>Sign out of this app</button>}
+      {state.status === 'signed-in' && <button onClick={openSignOutDialog}>Sign out of this app</button>}
       {state.status === 'failure' && <><button onClick={model.signIn}>Try sign-in again</button><button className="secondary" onClick={model.refresh}>Check session again</button></>}
       {state.status === 'pending' && <button className="secondary" onClick={model.cancel}>Cancel</button>}
     </div>
     <p className="mt-5 text-sm text-slate-600">Sign-in uses Auth0 Universal Login. Signing out ends this application’s session.</p>
+    <ConfirmationDialog
+      open={signOutRequest !== null}
+      content={signOutConfirmation}
+      onConfirm={confirmSignOut}
+      onCancel={cancelSignOut}
+    />
   </section>;
 }
 
 export default function App() {
+  const notifications = useNotificationProvider();
   const [model] = useState(() => createAuthModel(createAuthApi(), url => window.location.assign(url),
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('authError') === '1'));
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('authError') === '1', outcome => notifications.notify({
+      severity: outcome === 'success' ? 'success' : 'error',
+      message: outcome === 'success' ? 'You signed out of this app.' : 'Could not sign out. Please try again.',
+    })));
   const [projects] = useState(() => createProjectModel(createProjectApi(), path => window.history.pushState({}, '', path), () => model.cancel(), typeof window === 'undefined' ? '/' : window.location.pathname));
   const authentication = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
   useEffect(() => observeSession(model, window), [model]);

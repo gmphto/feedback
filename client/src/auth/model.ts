@@ -8,7 +8,7 @@ type AuthState = {
   operation: { action: Action; id: number } | null;
 };
 
-export function createAuthModel(api: AuthApi, navigate: (url: string) => void, failedCallback = false) {
+export function createAuthModel(api: AuthApi, navigate: (url: string) => void, failedCallback = false, onLogoutOutcome?: (outcome: 'success' | 'failure') => void) {
   const initialState: AuthState = {
     status: failedCallback ? 'failure' : 'pending', user: null, operation: null,
   };
@@ -37,6 +37,7 @@ export function createAuthModel(api: AuthApi, navigate: (url: string) => void, f
       if (!operation) return;
       const current = new AbortController(); controller = current;
       const isCurrent = () => !current.signal.aborted && operation.id === version;
+      let outcome: 'success' | 'failure' | undefined;
       try {
         if (operation.action === 'login') {
           const url = await api.beginLogin(current.signal);
@@ -46,9 +47,12 @@ export function createAuthModel(api: AuthApi, navigate: (url: string) => void, f
         let user: User | null = null;
         if (operation.action === 'logout') await api.logout(current.signal);
         else user = await api.currentSession(current.signal);
-        if (isCurrent()) store.dispatch(slice.actions.sessionReceived(user));
+        if (isCurrent()) { store.dispatch(slice.actions.sessionReceived(user)); outcome = 'success'; }
       } catch {
-        if (isCurrent()) store.dispatch(slice.actions.failed());
+        if (isCurrent()) { store.dispatch(slice.actions.failed()); outcome = 'failure'; }
+      }
+      if (operation.action === 'logout' && outcome) {
+        try { onLogoutOutcome?.(outcome); } catch { /* Feedback cannot change the committed API outcome. */ }
       }
     },
   });
@@ -57,6 +61,7 @@ export function createAuthModel(api: AuthApi, navigate: (url: string) => void, f
     store.dispatch(slice.actions.requested({ action, id: version }));
   }
   return {
+    getGeneration: () => version,
     store: { getState: store.getState, subscribe: store.subscribe },
     refresh: () => request('refresh'),
     signIn: () => request('login'),
@@ -66,7 +71,7 @@ export function createAuthModel(api: AuthApi, navigate: (url: string) => void, f
       store.dispatch(slice.actions.cancelled());
     },
     pause() { version++; controller?.abort(); },
-    dispose() { controller?.abort(); unsubscribe(); },
+    dispose() { version++; controller?.abort(); unsubscribe(); },
   };
 }
 export type AuthModel = ReturnType<typeof createAuthModel>;

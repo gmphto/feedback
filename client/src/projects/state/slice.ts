@@ -1,6 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit'
 import { projectReducer } from './reducer';
 import { createInitialState } from './state';
+import { editorReducer } from '../editor/state/reducer';
 
 export const slice = createSlice({
 
@@ -9,7 +10,8 @@ export const slice = createSlice({
     initialState: createInitialState(),
 
     reducers: {
-        ...projectReducer
+        ...projectReducer,
+        ...editorReducer
     },
 
     /** this is not needed, using rtk query which will own refresh logic */
