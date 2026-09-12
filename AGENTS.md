@@ -20,4 +20,5 @@ Root scripts are `dev`, `build`, `test`, and `typecheck`; keep this list synchro
 
 - `_docs/process.md` - how work is organized
 - `_docs/code-style.md` - coding requirements and review criteria; read before writing or reviewing code
+- `_docs/redux-toolkit.md` - how Redux Toolkit state and RTK Query are set up and structured (store / slice / state / API); read before adding or modifying client state
 - `_docs/testing-guidelines.md` - read before writing tests
