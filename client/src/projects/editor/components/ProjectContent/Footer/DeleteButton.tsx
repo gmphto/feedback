@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useAppDispatch, useAppSelector } from "../../../../store";
-import { selectEditor, selectProjectIsEditMode } from "../../../state/selector";
+import { useAppDispatch, useAppSelector } from "../../../../../core/store/hooks";
 import { DeleteCancelConfirm, type DeleteCancelResult } from "../../../../../shared/ui/MessageBox";
 import { projectActions } from "../../../../state/slice";
+import { selectEditor, selectProjectIsEditMode } from "../../../state/selector";
 
 export function DeleteButton() {
     const isEditMode = useAppSelector(selectProjectIsEditMode)

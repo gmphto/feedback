@@ -3,7 +3,7 @@ import type { Project } from "../types/project";
 import type { ApiProject } from "./types";
 
 // server ---> client
-function setupProjects(projects: ApiProject[]): Project[] {
+export function setupProjects(projects: ApiProject[]): Project[] {
     return (projects || []).map((project) => setupProject(project));
 }
 
@@ -15,7 +15,7 @@ function setupProject(project: ApiProject): Project {
 }
 
 // client ---> server
-function convertProjectToApi(draft: ProjectDraft): ApiProject {
+export function convertProjectToApi(draft: ProjectDraft): ApiProject {
 
     // omit validation stuff
 

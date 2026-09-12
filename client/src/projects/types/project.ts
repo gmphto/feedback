@@ -1,6 +1,6 @@
 type DateString = string; // ISO 8601 date string
 
-type DateNumber = number; // Unix timestamp in milliseconds
+
 
 export type GuidString = `${string}-${string}-${string}-${string}-${string}`; // UUID v4 string
 

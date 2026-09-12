@@ -21,17 +21,22 @@ function decodeDefinition(body: unknown): ProjectDefinition {
   if (!matchesSchema(body, definitionSchema)) throw { kind: 'unavailable' };
   return (body as { project: ProjectDefinition }).project;
 }
+function decodeFieldErrors(value: unknown): FieldErrors | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const fields: FieldErrors = {};
+  for (const [key, message] of Object.entries(value)) {
+    if ((key === '_form' || fieldKeys.includes(key as keyof ProjectDraft)) && typeof message === 'string') fields[key as keyof FieldErrors] = message;
+  }
+  return Object.keys(fields).length ? fields : undefined;
+}
 async function decodeResponse(response: Response): Promise<ProjectDefinition> {
   if (response.status === 401) throw { kind: 'unauthorized' };
   if (response.status === 404) throw { kind: 'missing' };
   if (response.status === 400) {
     const body: unknown = await response.json();
-    if (body && typeof body === 'object' && 'fields' in body && body.fields && typeof body.fields === 'object') {
-      const fields: FieldErrors = {};
-      for (const [key, value] of Object.entries(body.fields)) {
-        if ((key === '_form' || fieldKeys.includes(key as keyof ProjectDraft)) && typeof value === 'string') fields[key as keyof FieldErrors] = value;
-      }
-      if (Object.keys(fields).length) throw { kind: 'invalid', fields };
+    if (body && typeof body === 'object' && 'fields' in body) {
+      const fields = decodeFieldErrors(body.fields);
+      if (fields) throw { kind: 'invalid', fields };
     }
     throw { kind: 'unavailable' };
   }
@@ -39,7 +44,14 @@ async function decodeResponse(response: Response): Promise<ProjectDefinition> {
   return decodeDefinition(await response.json());
 }
 export function projectFailure(error: unknown): ProjectFailure {
-  if (error && typeof error === 'object' && 'kind' in error && ['unauthorized', 'missing', 'unavailable', 'invalid'].includes(String(error.kind))) return error as ProjectFailure;
+  if (error && typeof error === 'object' && 'kind' in error) {
+    const kind = error.kind;
+    if (kind === 'unauthorized' || kind === 'missing' || kind === 'unavailable') return { kind };
+    if (kind === 'invalid' && 'fields' in error) {
+      const fields = decodeFieldErrors(error.fields);
+      if (fields) return { kind, fields };
+    }
+  }
   return { kind: 'unavailable' };
 }
 

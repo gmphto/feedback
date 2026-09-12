@@ -52,7 +52,7 @@ export function ValidationError({ title, msgs , onClose }: Props) {
     const dialog = <MessageBox
         title={title}
         open
-        onClose={() => true}
+        onClose={onClose}
         footer={
             <>
                 <Button variant="contained" onClick={() => onClose()}>

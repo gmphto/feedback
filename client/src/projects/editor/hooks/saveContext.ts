@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAppDispatch, useAppSelector } from "../../store";
+import { useAppDispatch, useAppSelector } from "../../../core/store/hooks";
 import { projectActions } from "../../state/slice";
 import { showProjectValidationDialog } from "../components/ValidationErrorDialog";
 import { selectEditorCommands } from "../state/selector";
@@ -53,4 +53,3 @@ export function useSaveContext() {
         }
     }, [dispatch, readOnly, save, showValidationErrors])
 }
-

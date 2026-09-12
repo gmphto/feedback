@@ -10,6 +10,7 @@ export const slice = createSlice({
     initialState: createInitialState(),
 
     reducers: {
+        reset: () => createInitialState(),
         ...projectReducer,
         ...editorReducer
     },

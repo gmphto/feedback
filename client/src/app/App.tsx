@@ -1,90 +1,137 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ConfirmationDialog } from '../providers/confirmation';
-import { useNotificationProvider } from '../providers/notification';
-import { requestSignOut, type SignOutRequest } from '../auth/signOut';
-import { signOutConfirmation } from '../auth/signOutConfirmation';
-import { createAuthApi } from '../auth/api';
-import { createAuthModel, observeSession, type AuthModel } from '../auth/model';
+import { RouterProvider } from '@tanstack/react-router';
+import * as React from 'react';
+
+import { LoginButton } from '../components/LoginButton';
+import { LogoutButton } from '../components/LogoutButton';
+import { useAppDispatch } from '../core/store/hooks';
+import { useAuth, useAuthOperations } from '../auth/contexts/AuthProvider';
 import { createProjectApi } from '../projects/api';
+import { projectApi } from '../projects/api/api';
 import { createProjectModel } from '../projects/model';
-import { ProjectView } from '../projects/ProjectView';
+import { projectActions } from '../projects/state/slice';
+import { router } from './router';
+import { productName } from './shell/layout';
 
-export function AuthView({ model }: { model: AuthModel }) {
-  const [signOutRequest, setSignOutRequest] = useState<SignOutRequest | null>(null);
-  const state = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
+export function AuthView() {
+  const user = useAuth('AuthView', (state) => state.user, true);
+  const error = useAuthOperations('AuthView', (state) => state.error, true);
+  const refresh = useAuthOperations('AuthView', (state) => state.refresh, true);
+  const isLoadingUser = useAuthOperations('AuthView', (state) => state.isLoadingUser, true);
+  const isLoggingIn = useAuthOperations('AuthView', (state) => state.isLoggingIn, true);
+  const isLoggingOut = useAuthOperations('AuthView', (state) => state.isLoggingOut, true);
+  const isPending = isLoadingUser || isLoggingIn || isLoggingOut;
+  let sessionMessage = 'Sign in to start defining your project scope.';
 
-  function openSignOutDialog() {
-    const snapshot = model.store.getState();
-    if (snapshot.status !== 'signed-in') {
-      return;
-    }
-
-    setSignOutRequest({ snapshot, generation: model.getGeneration() });
+  if (isLoggingIn) {
+    sessionMessage = 'Opening secure sign-in…';
+  } else if (isLoggingOut) {
+    sessionMessage = 'Ending this application session…';
+  } else if (isLoadingUser) {
+    sessionMessage = 'Checking your session…';
+  } else if (user) {
+    sessionMessage = 'You’re signed in. Your application session is ready.';
   }
 
-  function cancelSignOut() {
-    setSignOutRequest(null);
-  }
+  const handleRefresh = React.useCallback(() => {
+    void refresh();
+  }, [refresh]);
 
-  function confirmSignOut() {
-    setSignOutRequest(null);
-    if (signOutRequest) {
-      requestSignOut(model, signOutRequest);
-    }
-  }
-
-  return <section aria-labelledby="session-heading">
-    <h2 id="session-heading" className="mt-8 text-lg font-semibold">Your application session</h2>
-    <div aria-live="polite" className="my-4 min-h-12">
-      {state.status === 'pending' && <p>{state.operation?.action === 'login' ? 'Opening secure sign-in…' : state.operation?.action === 'logout' ? 'Ending this application session…' : 'Checking your session…'}</p>}
-      {state.status === 'signed-out' && <p>Sign in to start defining your project scope.</p>}
-      {state.status === 'signed-in' && <p>You’re signed in. Your application session is ready.</p>}
-      {state.status === 'failure' && <p role="alert">We couldn’t complete authentication. Please try again.</p>}
-    </div>
-    <div className="flex flex-wrap gap-3">
-      {state.status === 'signed-out' && <button onClick={model.signIn}>Sign in</button>}
-      {state.status === 'signed-in' && <button onClick={openSignOutDialog}>Sign out of this app</button>}
-      {state.status === 'failure' && <><button onClick={model.signIn}>Try sign-in again</button><button className="secondary" onClick={model.refresh}>Check session again</button></>}
-      {state.status === 'pending' && <button className="secondary" onClick={model.cancel}>Cancel</button>}
-    </div>
-    <p className="mt-5 text-sm text-slate-600">Sign-in uses Auth0 Universal Login. Signing out ends this application’s session.</p>
-    <ConfirmationDialog
-      open={signOutRequest !== null}
-      content={signOutConfirmation}
-      onConfirm={confirmSignOut}
-      onCancel={cancelSignOut}
-    />
-  </section>;
+  return (
+    <section aria-labelledby="session-heading">
+      <h2 id="session-heading" className="mt-8 text-lg font-semibold">
+        Your application session
+      </h2>
+      <div aria-live="polite" className="my-4 min-h-12">
+        {(isPending || !error) && <p>{sessionMessage}</p>}
+        {error && <p role="alert">{error}</p>}
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {user ? <LogoutButton /> : <LoginButton />}
+        {(user || error) && (
+          <button
+            className="secondary"
+            disabled={isPending}
+            onClick={handleRefresh}
+          >
+            Check session again
+          </button>
+        )}
+      </div>
+      <p className="mt-5 text-sm text-slate-600">
+        Sign-in uses Auth0 Universal Login. Signing out ends this application’s session.
+      </p>
+    </section>
+  );
 }
 
 export default function App() {
-  const notifications = useNotificationProvider();
-  const [model] = useState(() => createAuthModel(createAuthApi(), url => window.location.assign(url),
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('authError') === '1', outcome => notifications.notify({
-      severity: outcome === 'success' ? 'success' : 'error',
-      message: outcome === 'success' ? 'You signed out of this app.' : 'Could not sign out. Please try again.',
-    })));
-  const [projects] = useState(() => createProjectModel(createProjectApi(), path => window.history.pushState({}, '', path), () => model.cancel(), typeof window === 'undefined' ? '/' : window.location.pathname));
-  const authentication = useSyncExternalStore(model.store.subscribe, model.store.getState, model.store.getState);
-  useEffect(() => observeSession(model, window), [model]);
-  useEffect(() => {
-    const sync = () => {
-      const state = model.store.getState();
-      if (state.status === 'signed-in') projects.setActor(state.user!.id);
-      else if (state.status !== 'pending' || state.operation?.action !== 'refresh') projects.setActor(null);
+  const dispatch = useAppDispatch();
+  const user = useAuth('App', (state) => state.user, true);
+  const isAuthenticated = useAuth('App', (state) => state.isAuthenticated, true);
+  const isSessionReady = useAuthOperations('App', (state) => state.isSessionReady, true);
+  const expireSession = useAuthOperations('App', (state) => state.expireSession, true);
+  const [projects] = React.useState(() => createProjectModel(
+    createProjectApi(),
+    (path) => {
+      window.history.pushState({}, '', path);
+    },
+    () => {
+      void expireSession();
+    },
+    typeof window === 'undefined' ? '/' : window.location.pathname,
+  ));
+
+  React.useEffect(() => {
+    // A transient check/failure hides projects without discarding unsaved work.
+    if (!isSessionReady) {
+      return;
+    }
+
+    projects.setActor(user?.id ?? null);
+    if (!user) {
+      dispatch(projectApi.util.resetApiState());
+      dispatch(projectActions.reset());
+    }
+  }, [isSessionReady, user?.id, projects, dispatch]);
+
+  React.useEffect(() => {
+    function handlePopState() {
+      projects.open(window.location.pathname, false);
+    }
+
+    projects.resume();
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      projects.pause();
     };
-    sync(); projects.resume();
-    const unsubscribe = model.store.subscribe(sync);
-    const pop = () => projects.open(window.location.pathname, false);
-    window.addEventListener('popstate', pop);
-    return () => { unsubscribe(); window.removeEventListener('popstate', pop); projects.pause(); };
-  }, [model, projects]);
-  return (
-    <main className="mx-auto max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
-      <h1>Project Scope Tool</h1>
-      <p className="mt-3 text-slate-600">Turn a rough project idea into a clear MVP scope.</p>
-      <AuthView model={model} />
-      {authentication.status === 'signed-in' && <ProjectView model={projects} />}
-    </main>
-  );
+  }, [projects]);
+
+  if (!isAuthenticated) {
+    return (
+      <main className="mx-auto max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
+        <h1>{productName}</h1>
+        <p className="mt-3 text-slate-600">
+          Turn a rough project idea into a clear MVP scope.
+        </p>
+        <AuthView />
+      </main>
+    );
+  }
+
+  // The session user is read inside the routes. The router's only job is the URL
+  // and the rail.
+  return <RouterProvider router={router} />;
+}
+
+
+
+
+function ProjectProvider() {
+  return (projectId: number ) =>  {
+    return () => {
+
+    }
+  }
 }

@@ -16,13 +16,16 @@
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
     "@reduxjs/toolkit": "^2.12.0",
+    "@tanstack/react-router": "^1.170.34",
     "immer": "11.1.18",
     "notistack": "^3.0.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-redux": "^9.3.0"
+    "react-redux": "^9.3.0",
+    "use-context-selector": "1.4.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",

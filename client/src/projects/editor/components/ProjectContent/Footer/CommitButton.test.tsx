@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../../api/api", () => ({
     useUpdateProjectMutation: () => [mocks.updateProject, { isLoading: mocks.isSaving }],
 }));
-vi.mock("../../../../store", () => ({ useAppDispatch: () => mocks.dispatch }));
+vi.mock("../../../../../core/store/hooks", () => ({ useTypedDispatch: () => mocks.dispatch }));
 vi.mock("../../../../state/slice", () => ({
     projectActions: { stopEditProject: () => ({ type: "projects/stopEditProject" }) },
 }));

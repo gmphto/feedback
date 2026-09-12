@@ -1,9 +1,9 @@
+import { Button } from "@mui/material";
 import { useState } from "react";
-import { useAppDispatch, useAppSelector } from "../../../../store";
-import { selectEditor, selectEditorCommands, selectProjectIsEditMode } from "../../../state/selector";
+import { useAppDispatch, useAppSelector } from "../../../../../core/store/hooks";
 import { OkCancelConfirm, type OkCancelResult } from "../../../../../shared/ui/MessageBox";
 import { projectActions } from "../../../../state/slice";
-import { Button } from "@mui/material";
+import { selectEditor, selectEditorCommands, selectProjectIsEditMode } from "../../../state/selector";
 
 export function CloseOrCancelButton() {
     const { canClose, canCancel } = useAppSelector(selectEditorCommands);

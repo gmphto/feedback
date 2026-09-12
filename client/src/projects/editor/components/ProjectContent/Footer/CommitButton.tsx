@@ -1,9 +1,9 @@
+import Button from "@mui/material/Button"
 import { useState } from "react"
+import { useAppDispatch } from "../../../../../core/store/hooks"
 import { useUpdateProjectMutation } from "../../../../api/api"
 import { projectActions } from "../../../../state/slice"
-import { useAppDispatch } from "../../../../store"
 import { useSaveContext } from "../../../hooks/saveContext"
-import Button from "@mui/material/Button"
 import { ProjectValidationError } from "../../ValidationErrorDialog"
 
 export function CommitButton() {
@@ -21,7 +21,6 @@ export function CommitButton() {
     /** save context */
     const { draftToSave, canSave, showSave, commandText, validateBeforeSave } = useSaveContext()
 
-    // ** broadcast too subscribers
     const dispatch = useAppDispatch()
 
     // only show save button if conditions are met
@@ -46,7 +45,7 @@ export function CommitButton() {
             await updateProject({
                 projectId: draftToSave.projectId,
                 name: draftToSave.name,
-                description: draftToSave.idea ?? "",
+                // idea: draftToSave.idea ?? "",
             }).unwrap();
 
             // close editor
@@ -79,7 +78,7 @@ export function CommitButton() {
         <>
 
             {saveButton} {error}
-          
+
         </>
 
     )

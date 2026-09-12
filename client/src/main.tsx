@@ -1,11 +1,14 @@
-import { StrictMode } from 'react';
+import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 
 import App from './app/App';
 import './index.css';
 import { ThemeProvider } from '@mui/material/styles';
-import { LightTheme } from './theme';
-import { NotificationProvider } from './providers/notification';
+import { LightTheme } from './core/theme';
+import { SnackbarProvider } from 'notistack';
+import { Provider } from 'react-redux';
+import { store } from './core/store/configure';
+import { AuthProvider } from './auth/contexts/AuthProvider';
 
 const rootElement = document.getElementById('root');
 
@@ -14,12 +17,15 @@ if (!rootElement) {
 }
 
 createRoot(rootElement).render(
-  <StrictMode>
+  <React.StrictMode>
     <ThemeProvider theme={LightTheme}>
-      <NotificationProvider>
-        <App />
-      </NotificationProvider>
+      <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
+        <Provider store={store}>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </Provider>
+      </SnackbarProvider>
     </ThemeProvider>
-  </StrictMode>,
+  </React.StrictMode>,
 );
-

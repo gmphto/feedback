@@ -25,6 +25,7 @@ type MessageBoxProps = {
     children: ReactNode;
     footer: ReactNode;
     onClose: () => void;
+    onEntered?: () => void;
 };
 
 export function MessageBox({
@@ -33,6 +34,7 @@ export function MessageBox({
     children,
     footer,
     onClose,
+    onEntered,
 }: MessageBoxProps) {
     const titleId = useId();
 
@@ -43,6 +45,11 @@ export function MessageBox({
             aria-labelledby={titleId}
             fullWidth
             maxWidth="xs"
+            slotProps={{
+                transition: {
+                    onEntered,
+                },
+            }}
         >
             <DialogTitle id={titleId}>{title}</DialogTitle>
             <DialogContent>{children}</DialogContent>

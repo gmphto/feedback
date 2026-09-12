@@ -2,6 +2,8 @@
 
 Client tests use Vitest; server tests use Node's built-in runner through the installed tsx loader. Keep tests deterministic and isolated, with no database, identity provider or AI service needed for scaffold tests. Use Fastify injection for API contracts and close each application after its test.
 
+Auth browser checks use Playwright against the real application with intercepted HTTP responses: `pnpm --filter client exec playwright test`. The config starts Vite on port 5187. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an existing Chromium executable when using a cached browser; otherwise install the runner's browser with `pnpm --filter client exec playwright install chromium`. Browser specs live in `client/test/browser` and are excluded from Vitest. These checks cover navigation, confirmation focus/cancellation, pending controls, retries, draft retention, and document replacement on logout or expiry.
+
 Test observable behavior: successful outcomes and validation failures, plus authorization, cancellation and stale-state conflicts when the feature has those behaviors. Inject failing effects instead of relying on external outages; assert status, content type and exact API response shape. Do not invent authentication or concurrency behavior for the scaffold.
 
 Run the smallest relevant test first, then the complete suite and build:

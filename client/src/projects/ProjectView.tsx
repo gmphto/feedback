@@ -25,6 +25,7 @@ export function ProjectView({ model }: { model: ProjectModel }) {
     if (hasErrors) errors.current?.focus();
   }, [hasErrors]);
 
+  // DASHBOARD
   if (state.status === 'home') {
     return (
       <section className="mt-8">
@@ -56,6 +57,7 @@ export function ProjectView({ model }: { model: ProjectModel }) {
           Capture your starting context. This text will not create requirements or approved scope.
         </p>
 
+{/* EDITOR */}
         <form
           noValidate
           onSubmit={event => {
@@ -141,6 +143,9 @@ export function ProjectView({ model }: { model: ProjectModel }) {
             </button>
           </div>
         </form>
+
+
+
       </section>
     );
   }

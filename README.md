@@ -1,379 +1,410 @@
-# Project Scope Tool
+# Codebase table of contents
 
-Turn rough project ideas into a precise, justified MVP scope.
-
-## Requirements
-
-- Node.js 22.13 or newer
-- pnpm 11.5.0
-
-## Commands
-
-- `pnpm install` installs workspace dependencies.
-- `pnpm dev` starts the client and server development processes.
-- `pnpm test` runs the client and server test suites.
-- `pnpm --filter client test` runs all client tests.
-- `pnpm --filter client test -- src/app/App.test.tsx` runs one client test file.
-- `pnpm --filter server test` type-checks and runs all server tests.
-- `pnpm --filter server exec tsx --test test/readiness.test.ts` runs the readiness API tests.
-- `pnpm build` builds all workspace packages.
-- `pnpm --filter client build` builds the client.
-- `pnpm --filter server build` builds the server.
-
-## Application readiness
-
-The server's persistent API tests use Fastify injection, Node's built-in test
-runner, and the existing `tsx` dependency; they require no listening port or
-external service. They cover success, failure, safe error responses, and recovery.
-
-With the server running, request `GET http://localhost:3000/api/ready`
-(or use the port configured through `PORT`). No sign-in is required.
-
-- HTTP 200 with `{"status":"ready"}` means the application check succeeded.
-- HTTP 503 with `{"status":"not_ready"}` means the check failed, including
-  an unexpected exception. The response contains no internal error details.
-
-Each request runs the check again, so the endpoint can recover after a failed
-check without restarting the server. Production readiness includes PostgreSQL connectivity and required migration history established by [issue #3](https://github.com/gmphto/project-scope-tool/issues/3).
-
-## Local development
-
-From a clean checkout, run `pnpm install --frozen-lockfile`, then `pnpm dev`.
-Open http://127.0.0.1:5173 for the client. The API listens on
-http://localhost:3000 by default. No database, Auth0, or AI credentials are
-required to start; database configuration and migrations are required for ready status.
-Vite refreshes client edits; restart `pnpm dev` after server edits.
-Ctrl+C stops both development processes. If either process cannot start or
-exits, the supervisor stops its companion and returns a nonzero status.
-The client port defaults to 5173; an occupied port fails visibly. Vite CLI
-options can be forwarded, for example `pnpm dev -- --port 5174`.
-
-The server reads `DATABASE_URL` (no default) and `PORT` (default `3000`), an integer from 1
-through 65535. For example, in PowerShell:
-
-```powershell
-$env:PORT = '3001'
-pnpm dev
-Remove-Item Env:PORT
-```
-
-On a POSIX shell: `PORT=3001 pnpm dev`. There is no `.env` loader or required
-secret file. Vite's standard development/production mode is managed by its
-commands; the client reads no application environment variables.
-
-`pnpm test` includes real PostgreSQL tests and requires `TEST_DATABASE_URL` (no default). `pnpm build`
-type-checks both packages and emits `client/dist/index.html` with its assets
-and `server/dist/main.js` with its server modules. After building,
-`pnpm --filter client preview` previews the client output and
-`pnpm --filter server start` starts the compiled API. `pnpm typecheck`
-checks all workspace packages without building server output.
-
-Current contributor guidance: [_docs/plan.md](_docs/plan.md),
-[_docs/stack.md](_docs/stack.md),
-[_docs/testing-guidelines.md](_docs/testing-guidelines.md), and
-[_docs/design-system.md](_docs/design-system.md).
-
-## PostgreSQL migrations and integration tests
-
-PostgreSQL 17 is the verified local version. Supply an existing application
-database and a role allowed to create tables in its `public` schema. Application
-startup never creates databases or applies migrations. From installation to start:
-
-```powershell
-pnpm install --frozen-lockfile
-$env:DATABASE_URL = 'postgresql://app_user:example_only@127.0.0.1:5432/scope_app'
-pnpm --filter server db:migrate
-pnpm dev
-```
-
-Replace the example role/password with local configuration; never commit real
-credentials. Environment variables must be set in the process environment;
-there is no `.env` loader. The migration command uses ordered immutable files
-under `server/src/db/migrations`; never modify an already-applied migration.
-The initial migration creates only Kysely metadata, with no product tables.
-The second migration adds local identities, digest-only application sessions,
-and browser-bound, single-use login transactions. Session expiry is
-fixed at eight hours (no sliding renewal); login transactions expire after ten
-minutes. Both reject access at the expiry boundary. Provider verification must
-succeed before creating a session, and persistence must commit before issuing
-a cookie. No live Auth0 smoke test has been performed in this workspace.
-Repeated migrations are safe. Kysely serializes migrations using its PostgreSQL
-locking and transactions; failure returns a sanitized nonzero result and rolls
-back the failed migration.
-
-Database connection acquisition and PostgreSQL statements each have a 3-second
-timeout; the client query timeout is 4 seconds. Readiness checks only read
-migration history and never migrate. The production endpoint now returns 503
-when database configuration is absent/invalid, connectivity fails, or a required
-migration is absent, and recovers to 200 on a successful recheck. Responses still
-contain only `status`. Pools are closed by migration completion and server
-shutdown.
-
-Real PostgreSQL tests require a separately supplied `TEST_DATABASE_URL`:
-
-```powershell
-$env:TEST_DATABASE_URL = 'postgresql://test_user:example_only@127.0.0.1:5432/scope_test_host'
-pnpm --filter server test:integration
-pnpm test
-pnpm build
-```
-
-Use a dedicated local/test PostgreSQL instance. The test role needs `CONNECT`
-on the supplied database and `CREATEDB`; it owns each temporary database it
-creates. Each case creates a unique `scope_test_...` database, migrates from
-empty, closes all connections and drops only its own successfully created
-database in test cleanup, including assertion failures. The supplied database is
-never reset/dropped and need not be empty. Tests never fall back to
-`DATABASE_URL`. Missing test configuration fails the integration and full suites
-with a setup message instead of skipping coverage.
-
-`pnpm --filter server test` type-checks and runs service-free tests followed by
-integration tests. `pnpm --filter server exec tsx --test test/readiness.test.ts`
-still runs the isolated injected API coverage without PostgreSQL.
-
-## Project ownership API
-
-Migration `0003_project_ownership` adds integer projects with an owner foreign
-key, nonblank name (maximum 200 characters) and version initially 1. Minimal
-feature-area/project and feature/feature-area foreign keys establish the actual
-nested membership structure; later issues add product fields and workflows.
-Apply migrations with `pnpm --filter server db:migrate` before using the API.
-
-All project operations resolve the actor through the existing application
-session guard. The server project module requires that actor for every query
-and command and applies owner predicates in SQL. Nested reads constrain the
-entire actual parent chain in the same query, even when all mismatched resources
-belong to the same user. Production handlers cannot access an unscoped project
-lookup/update or arbitrary database callback. Tests may seed relational fixtures
-directly in their isolated databases.
-
-| Route | Owner response |
+| Folder | Purpose |
 | --- | --- |
-| `GET /api/projects/:projectId` | `{ "project": { "id": 1, "name": "Scope", "version": 1 } }` |
-| `GET /api/projects` | `{ "projects": [...] }` using the same representation |
-| `PATCH /api/projects/:projectId` | Same project envelope with the saved name and incremented version |
-| `GET /api/projects/:projectId/feature-areas/:featureAreaId` | `{ "featureArea": { "id": 1, "projectId": 1 } }` |
-| `GET /api/projects/:projectId/feature-areas/:featureAreaId/features/:featureId` | `{ "feature": { "id": 1, "featureAreaId": 1 } }` |
+| [client/](client/) | HUB - for developers, engineers and vibe coders to structure what they are building |
+| [server/src/](server/src/) | Backend APIs, authentication, project logic, and database access. |
+| [server/test/](server/test/) | Backend tests, integration tests, and test helpers. |
+| [scripts/](scripts/) | Development tooling and lifecycle tests. |
+| [_docs/](_docs/) | Project plans, architecture, design guidelines, and team workflow. |
 
-PATCH accepts exactly `{ "name": "New name", "expectedVersion": 1 }`. It trims
-the name, validates it, and increments version once inside an owner-scoped
-transaction. A stale owner write returns 409
-`{ "error": "conflict", "project": { "id": 1, "name": "Saved name", "version": 2 } }`
-without changing data. Missing/foreign resources and parent mismatches return
-the identical 404 `{ "error": "not_found" }`; foreign actors never see a
-conflict representation. Submitted owner IDs, identity fields and extra PATCH
-fields are rejected rather than silently removed. Creation sets the owner from
-its authenticated actor; the form and endpoint below never accept an owner field.
+Dependency folders (`node_modules`) and generated build output (`dist`) are excluded.
 
-Lists accept only optional `name` (case-insensitive literal substring, at most
-200 characters), `limit` (1–100, default 50), and `offset` (nonnegative safe
-integer, default 0). Ownership and filtering apply before name-then-ID ascending
-ordering and pagination. `%` and `_` are literal search characters. Path IDs
-are canonical positive decimals in PostgreSQL's integer range.
-
-Authentication runs before resource validation. Missing/invalid sessions return
-the existing 401, and unavailable auth returns its existing sanitized 503.
-Unsafe methods require exact application Origin before authentication, so even
-an unauthenticated cross-site PATCH returns 403 without mutation. Authenticated
-invalid IDs, names, versions, list parameters or extra fields return 400
-`{ "error": "invalid_request" }` independently of resource existence. A project
-database failure returns 503 `{ "error": "project_unavailable" }`. Protected
-project responses use `Cache-Control: no-store`.
-
-Real PostgreSQL/Fastify tests exercise two users, same-owner projects, multiple
-areas within one project, cross-owner and same-owner parent swaps, forged
-ownership, unchanged rejected writes and concurrent expected-version conflicts.
-Run focused policy tests with
-`pnpm --filter server exec tsx --test test/project-policy.test.ts`, then supply
-`TEST_DATABASE_URL` and run
-`pnpm --filter server exec tsx --test test/integration/projects.test.ts` before
-the full test/build commands.
-
-## Create a project and save starting context
-
-After signing in, choose **Create project** or open `/projects/new`. The form
-has eight fields; only project name is required. Character limits count Unicode
-code points, so astral characters count once. Native UTF-16 maxlength attributes
-do not prevent valid input. Name is trimmed; all optional text, including spaces
-and newlines, is preserved exactly. No field accepts a NUL character.
-
-| Input key | Visible field | Limit |
-| --- | --- | --- |
-| `name` | Project name (required) | 200 |
-| `roughIdea` | Rough idea / notes | 10000 |
-| `primaryUser` | Primary user | 4000 |
-| `coreJob` | Core job | 4000 |
-| `mainProblem` | Main user problem | 4000 |
-| `mvpOutcome` | Desired MVP outcome | 4000 |
-| `initialProductAreas` | Initial product areas | 4000 |
-| `constraints` | Known constraints | 10000 |
-
-`POST /api/projects` accepts only these string keys, with optional values omitted
-or supplied as text. Omitted values become empty strings; null/numbers/arrays/
-objects and owner/identity/version fields are invalid. Migration
-`0004_project_context` adds the optional columns and gives existing projects
-empty strings. One atomic insert assigns the session owner's ID and version 1.
-Success returns 201 with `Location: /api/projects/<id>/definition` and the exact
-`project` envelope containing id, name, version and all seven optional fields.
-Duplicate names are allowed.
-
-`GET /api/projects/:projectId/definition` reloads that complete envelope for the
-owner. Existing summary/list/name-PATCH contracts keep their smaller shapes;
-name updates preserve every optional field. The form navigates to
-`/projects/<id>` only after confirmed creation. Direct URLs, reload and browser
-back/forward fetch the saved owner-scoped definition through the API facade.
-The saved view displays all seven context fields, marks empty strings as
-**Not supplied**, and renders supplied content as text, never HTML. Initial
-product-area text does not create feature-area rows or approved scope.
-
-Create validation returns 400
-`{ "error": "invalid_request", "fields": { "name": "Enter a project name." } }`.
-Malformed JSON/top-level shapes and unknown keys use `_form`. The form keeps
-entered values, links accessible errors to fields and permits corrections.
-Authentication, Origin, ownership, no-store and sanitized 503 contracts remain
-in force. A 401 clears the protected display and returns to sign-in.
-
-Pending submission is announced and guarded in both the command model and UI,
-so repeated clicks before a rerender send one request. Failures do not navigate
-or render success, and no POST is retried automatically. A lost response may
-follow a successful server commit; users must check before deliberately retrying.
-Cancelling/leaving before submission sends nothing. After dispatch, cancellation
-aborts observation and invalidates the operation, but the server may still save.
-Late responses cannot overwrite a new draft or view, navigate after cancellation,
-or repopulate another session's state. Sign-out clears project representations.
-Drafts and saved API data have separate mutation owners and are not stored in
-browser storage.
-
-The test-only browser harness below supports project timing/failure inspection:
-open `/api/test/projects?delay=2000&failure=false` on the app origin, return to
-the form and submit/cancel/back during pending work. Use `failure=true` for a
-sanitized create/read failure and `failure=false&delay=300` to restore service.
-Only the explicit harness exposes these controls. Verify field corrections,
-keyboard submit/cancel, heading focus after navigation, reload, back/forward,
-and narrow/wide layouts. Model/API tests cover operation races and cache/draft
-separation; real PostgreSQL tests cover exact text, field limits, upgrade defaults,
-atomic failure and owner isolation.
-
-## Auth0 authentication
-
-Fastify owns OIDC Authorization Code with PKCE S256, callback verification,
-local identity and PostgreSQL application sessions. The client uses Auth0
-Universal Login, with no provider tokens in cookies, browser storage or API
-responses. Configure an Auth0 **Regular Web Application**, then set these
-server environment variables before starting development:
-
-| Variable | Contract |
-| --- | --- |
-| `AUTH0_ISSUER_BASE_URL` | Required HTTPS Auth0 issuer origin, e.g. `https://tenant.example/`; normalized with a trailing slash. |
-| `AUTH0_CLIENT_ID` | Required nonblank Auth0 Regular Web Application client ID; preserved exactly. |
-| `AUTH0_CLIENT_SECRET` | Required nonblank server-only client secret; preserved exactly. Never use a `VITE_` prefix or send it to the browser. |
-| `APP_ORIGIN` | Required HTTPS application origin, e.g. `https://scope.example`; normalized without a trailing slash. |
-| `AUTH_ALLOW_LOCAL_HTTP` | Absent or literal `false` by default; literal `true` requires `NODE_ENV=development` or `NODE_ENV=test`. Other values are invalid. |
-
-Issuer and application URLs reject credentials, non-root paths, queries and
-fragments. The callback URL is always normalized `APP_ORIGIN` plus
-`/auth/callback`; request Host/forwarded headers cannot select it. This is the
-callback URL to allow in the Auth0 Regular Web Application setup.
-For explicit local development only, the HTTP opt-in allows `APP_ORIGIN` such
-as `http://127.0.0.1:5173` (also literal `localhost` or `[::1]`, with an optional
-port). Production and unspecified environments reject the opt-in entirely.
-HTTPS applications always require Secure cookies even with the flag enabled;
-the issuer must always use HTTPS. Fake provider transport belongs only in tests.
-
-Missing or invalid configuration returns only `authentication_unavailable` from
-the parser, never input values, credentials or parser errors. Sign-in and session
-routes map unavailable configuration/database/provider services to HTTP 503
-`{"error":"authentication_unavailable"}`. Request logging records only the
-registered route and response status, excluding raw URLs, queries, headers and
-framework request-error payloads. Provider failures are never explicitly logged.
-
-For local development, set `NODE_ENV=development`, `AUTH_ALLOW_LOCAL_HTTP=true`,
-and `APP_ORIGIN=http://127.0.0.1:5173`. Set the real tenant issuer/client ID and
-client secret in your shell or secret manager; do not put secrets in source code
-or Vite variables. In Auth0, allow callback URL
-`http://127.0.0.1:5173/auth/callback` and application origin
-`http://127.0.0.1:5173`. Apply migrations, then run `pnpm dev`. Vite proxies
-`/auth` and `/api` to Fastify on `PORT` (default 3000), keeping browser requests
-on the configured application origin. Always open the exact configured origin;
-`localhost` and `127.0.0.1` are different origins. In production, terminate HTTPS
-and route `/auth` and `/api` to Fastify under the same `APP_ORIGIN`; do not enable
-the HTTP opt-in. There is no implicit `.env` loader.
-
-The browser sign-in control requests `GET /auth/login?returnTo=/` with
-`Accept: application/json`, receiving only `{ "authorizationUrl": "..." }`
-and an HttpOnly login-transaction cookie before navigating to Auth0. This lets
-the UI show retryable availability errors. Ordinary browser GETs to that route
-redirect directly to hosted login. Unsafe return paths fall back to `/`.
-Callbacks consume browser-bound state exactly once before code exchange and
-validate nonce, PKCE, signature, issuer, audience and token timing through
-`openid-client`. Failed/cancelled callbacks redirect to `/?authError=1` with a
-generic retry UI and no new session.
-
-Production uses `__Host-scope_session` and `__Host-scope_login` cookies with
-HttpOnly, Secure, SameSite=Lax and Path=/; explicit local HTTP uses `scope_session`
-and `scope_login` without Secure. No Domain attribute is set. Session cookies
-expire no later than their fixed eight-hour server expiry; there is no sliding
-renewal. Login transactions expire after ten minutes. Both reject use at the
-expiry boundary. PostgreSQL stores SHA-256 identifier digests, never raw session
-identifiers or provider tokens. Local users are unique by issuer plus subject,
-not email.
-
-`GET /api/session` returns exactly `{"user":{"id":<integer>}}` for an active
-session, or 401 `{"error":"unauthorized"}` and clears an invalid cookie.
-`POST /auth/logout` revokes the app session and clears the cookie with HTTP 204;
-replay fails and repeated logout is safe. Unsafe authentication requests reject
-missing, `null` or mismatched Origin with 403 `{"error":"forbidden"}` before
-mutation. The expected value is the exact normalized `APP_ORIGIN`. The callback
-GET uses its single-use browser binding instead. `GET /api/ready` remains public.
-Signing out ends only this application's session; Auth0 may retain its own SSO
-session, so a later sign-in may not ask for credentials again.
-
-The client API facade owns transport; Zustand with Immer draft recipes and
-selector listener middleware owns pending, signed-out, signed-in and retry
-state. New requests cancel older work and ignore late results. A 401 clears
-signed-in state, service failures show retry controls, and returning focus to
-the page rechecks the session. No editable project draft exists yet.
-
-### Automated and browser checks without a live tenant
-
-The full suite includes a listening local fake OIDC provider that signs RSA
-fixtures with Node crypto and exercises the real `openid-client` discovery,
-exchange and token validation boundary. It tests invalid signature, issuer,
-audience, expiry, nonce, future timing, missing ID token, bad PKCE, state/browser
-binding, replay, cancellation and provider failure. Real PostgreSQL HTTP tests
-also verify session cookies, CSRF, revocation, expiry and database failure.
-These are deterministic provider contract tests, not a live Auth0 smoke result.
-
-For interactive QA, with `TEST_DATABASE_URL` configured as described above:
-
-```powershell
-# Terminal 1: test-only API/provider, with a unique run-owned database
-pnpm --filter server exec tsx test/fixtures/auth-browser.ts
-# Terminal 2: client only (do not run pnpm dev alongside the test API)
-pnpm --filter client dev --host 127.0.0.1
 ```
+feedback
+├─ .agents
+│  └─ karpathy.md
+├─ .cate
+│  ├─ session.json
+│  ├─ session.json.bak
+│  ├─ workspace.json
+│  ├─ workspace.json.bak
+│  └─ worktrees
+│     └─ review-projects-feature
+│        ├─ .agents
+│        │  └─ karpathy.md
+│        ├─ .codex
+│        │  └─ hooks.json
+│        ├─ AGENTS.md
+│        ├─ client
+│        │  ├─ index.html
+│        │  ├─ package.json
+│        │  ├─ src
+│        │  │  ├─ app
+│        │  │  │  ├─ App.test.tsx
+│        │  │  │  └─ App.tsx
+│        │  │  ├─ auth
+│        │  │  │  ├─ api.ts
+│        │  │  │  ├─ auth.test.tsx
+│        │  │  │  ├─ model.ts
+│        │  │  │  ├─ signOut.test.ts
+│        │  │  │  ├─ signOut.ts
+│        │  │  │  └─ signOutConfirmation.ts
+│        │  │  ├─ index.css
+│        │  │  ├─ main.tsx
+│        │  │  ├─ projects
+│        │  │  │  ├─ api
+│        │  │  │  │  ├─ api.ts
+│        │  │  │  │  ├─ projects.ts
+│        │  │  │  │  └─ types.ts
+│        │  │  │  ├─ api.ts
+│        │  │  │  ├─ dashboard
+│        │  │  │  │  ├─ Dashboard.tsx
+│        │  │  │  │  ├─ grouping.test.ts
+│        │  │  │  │  ├─ grouping.ts
+│        │  │  │  │  ├─ sorting.test.ts
+│        │  │  │  │  ├─ sorting.ts
+│        │  │  │  │  ├─ state
+│        │  │  │  │  │  └─ state.ts
+│        │  │  │  │  └─ types.ts
+│        │  │  │  ├─ editor
+│        │  │  │  │  ├─ components
+│        │  │  │  │  │  ├─ ProjectContent
+│        │  │  │  │  │  │  ├─ Body
+│        │  │  │  │  │  │  │  └─ ProjectContentBody.tsx
+│        │  │  │  │  │  │  ├─ Footer
+│        │  │  │  │  │  │  │  ├─ CloseAndCancelButton.tsx
+│        │  │  │  │  │  │  │  ├─ CommitButton.test.tsx
+│        │  │  │  │  │  │  │  ├─ CommitButton.tsx
+│        │  │  │  │  │  │  │  ├─ DeleteButton.tsx
+│        │  │  │  │  │  │  │  └─ Footer.tsx
+│        │  │  │  │  │  │  ├─ Header
+│        │  │  │  │  │  │  │  └─ Header.tsx
+│        │  │  │  │  │  │  └─ PlanContent.tsx
+│        │  │  │  │  │  └─ ValidationErrorDialog.tsx
+│        │  │  │  │  ├─ Editor.tsx
+│        │  │  │  │  ├─ hooks
+│        │  │  │  │  │  └─ saveContext.ts
+│        │  │  │  │  ├─ state
+│        │  │  │  │  │  ├─ commands.test.ts
+│        │  │  │  │  │  ├─ commands.ts
+│        │  │  │  │  │  ├─ handlers
+│        │  │  │  │  │  │  ├─ createNewDraftProject.ts
+│        │  │  │  │  │  │  ├─ createProjectDraft.ts
+│        │  │  │  │  │  │  ├─ handleCancelCurrentEdits.ts
+│        │  │  │  │  │  │  ├─ handleCreateEditorProject.ts
+│        │  │  │  │  │  │  ├─ handleStartCreateNewProject.ts
+│        │  │  │  │  │  │  ├─ handleStartEditProject.ts
+│        │  │  │  │  │  │  └─ handleUpdateProject.ts
+│        │  │  │  │  │  ├─ reducer.ts
+│        │  │  │  │  │  ├─ selector.ts
+│        │  │  │  │  │  └─ state.ts
+│        │  │  │  │  ├─ types
+│        │  │  │  │  │  └─ projectDraft.ts
+│        │  │  │  │  ├─ validation.ts
+│        │  │  │  │  └─ validationMessages.ts
+│        │  │  │  ├─ fields.ts
+│        │  │  │  ├─ model.ts
+│        │  │  │  ├─ ProjectIndex.tsx
+│        │  │  │  ├─ projects.test.tsx
+│        │  │  │  ├─ ProjectView.tsx
+│        │  │  │  ├─ state
+│        │  │  │  │  ├─ handlers
+│        │  │  │  │  │  ├─ handleCloseEditor.ts
+│        │  │  │  │  │  └─ handleOpenEditor.ts
+│        │  │  │  │  ├─ reducer.test.ts
+│        │  │  │  │  ├─ reducer.ts
+│        │  │  │  │  ├─ selector.ts
+│        │  │  │  │  ├─ slice.ts
+│        │  │  │  │  └─ state.ts
+│        │  │  │  ├─ store.ts
+│        │  │  │  ├─ types
+│        │  │  │  │  └─ project.ts
+│        │  │  │  └─ types.ts
+│        │  │  ├─ shared
+│        │  │  │  ├─ ui
+│        │  │  │  │  └─ MessageBox.tsx
+│        │  │  │  └─ util
+│        │  │  │     └─ state.ts
+│        │  │  ├─ theme
+│        │  │  │  ├─ index.ts
+│        │  │  │  ├─ palette
+│        │  │  │  │  ├─ dark.ts
+│        │  │  │  │  ├─ index.tsx
+│        │  │  │  │  ├─ light.ts
+│        │  │  │  │  └─ refine.ts
+│        │  │  │  └─ typography.ts
+│        │  │  └─ transport
+│        │  │     └─ schema.ts
+│        │  ├─ tsconfig.json
+│        │  └─ vite.config.ts
+│        ├─ package.json
+│        ├─ pnpm-lock.yaml
+│        ├─ pnpm-workspace.yaml
+│        ├─ README.md
+│        ├─ scripts
+│        │  ├─ dev.mjs
+│        │  └─ dev.test.mjs
+│        ├─ server
+│        │  ├─ package.json
+│        │  ├─ src
+│        │  │  ├─ app.ts
+│        │  │  ├─ auth
+│        │  │  │  ├─ configuration.ts
+│        │  │  │  ├─ oidc.ts
+│        │  │  │  ├─ policy.ts
+│        │  │  │  ├─ repository.ts
+│        │  │  │  ├─ routes.ts
+│        │  │  │  └─ service.ts
+│        │  │  ├─ db
+│        │  │  │  ├─ configuration.ts
+│        │  │  │  ├─ database.ts
+│        │  │  │  ├─ migrate-main.ts
+│        │  │  │  ├─ migrate.ts
+│        │  │  │  ├─ migrations
+│        │  │  │  │  ├─ 0001_initial.ts
+│        │  │  │  │  ├─ 0002_authentication.ts
+│        │  │  │  │  ├─ 0003_project_ownership.ts
+│        │  │  │  │  └─ 0004_project_context.ts
+│        │  │  │  └─ migrations.ts
+│        │  │  ├─ main.ts
+│        │  │  ├─ production-app.ts
+│        │  │  ├─ projects
+│        │  │  │  ├─ creation.ts
+│        │  │  │  ├─ module.ts
+│        │  │  │  ├─ policy.ts
+│        │  │  │  ├─ router-errors.ts
+│        │  │  │  └─ routes.ts
+│        │  │  └─ readiness.ts
+│        │  ├─ test
+│        │  │  ├─ auth-configuration.test.ts
+│        │  │  ├─ auth-policy.test.ts
+│        │  │  ├─ database-configuration.test.ts
+│        │  │  ├─ fixtures
+│        │  │  │  ├─ auth-browser.ts
+│        │  │  │  └─ failing-migration.ts
+│        │  │  ├─ integration
+│        │  │  │  ├─ auth.test.ts
+│        │  │  │  ├─ database.test.ts
+│        │  │  │  └─ projects.test.ts
+│        │  │  ├─ project-policy.test.ts
+│        │  │  ├─ readiness.test.ts
+│        │  │  ├─ request-logging.test.ts
+│        │  │  └─ support
+│        │  │     ├─ database.ts
+│        │  │     └─ oidc-provider.ts
+│        │  ├─ tsconfig.json
+│        │  └─ tsconfig.test.json
+│        └─ _docs
+│           ├─ design-system.md
+│           ├─ outdated
+│           │  ├─ stack.md
+│           │  └─ tasks.md
+│           ├─ plan.md
+│           ├─ process.md
+│           ├─ projects-feature-review.md
+│           ├─ stack.md
+│           ├─ task-template.md
+│           ├─ team
+│           │  ├─ design-authority.md
+│           │  ├─ pm.md
+│           │  ├─ qa-engineer.md
+│           │  └─ software-engineer.md
+│           └─ testing-guidelines.md
+├─ .codex
+│  └─ hooks.json
+├─ AGENTS.md
+├─ client
+│  ├─ index.html
+│  ├─ package.json
+│  ├─ playwright.config.ts
+│  ├─ src
+│  │  ├─ app
+│  │  │  ├─ App.test.tsx
+│  │  │  ├─ App.tsx
+│  │  │  ├─ router.test.ts
+│  │  │  ├─ router.tsx
+│  │  │  └─ shell
+│  │  │     ├─ AppRail.tsx
+│  │  │     ├─ AppShell.tsx
+│  │  │     ├─ AppTopBar.tsx
+│  │  │     ├─ layout.ts
+│  │  │     ├─ navigation.test.ts
+│  │  │     └─ navigation.ts
+│  │  ├─ auth
+│  │  │  ├─ auth.ts
+│  │  │  └─ contexts
+│  │  │     ├─ AuthProvider.test.tsx
+│  │  │     └─ AuthProvider.tsx
+│  │  ├─ components
+│  │  │  ├─ Auth
+│  │  │  ├─ Context.tsx
+│  │  │  ├─ Layout
+│  │  │  ├─ LoginButton.tsx
+│  │  │  └─ LogoutButton.tsx
+│  │  ├─ core
+│  │  │  ├─ api
+│  │  │  │  ├─ api.ts
+│  │  │  │  └─ useFocusSessionRevalidation.ts
+│  │  │  ├─ routing
+│  │  │  ├─ store
+│  │  │  │  ├─ configure.ts
+│  │  │  │  └─ hooks.ts
+│  │  │  └─ theme
+│  │  │     ├─ index.ts
+│  │  │     ├─ palette
+│  │  │     │  ├─ dark.ts
+│  │  │     │  ├─ index.tsx
+│  │  │     │  ├─ light.ts
+│  │  │     │  └─ refine.ts
+│  │  │     └─ typography.ts
+│  │  ├─ index.css
+│  │  ├─ main.tsx
+│  │  ├─ projects
+│  │  │  ├─ api
+│  │  │  │  ├─ api.ts
+│  │  │  │  ├─ projects.ts
+│  │  │  │  └─ types.ts
+│  │  │  ├─ api.ts
+│  │  │  ├─ dashboard
+│  │  │  │  ├─ components
+│  │  │  │  ├─ Dashboard.tsx
+│  │  │  │  ├─ grouping.test.ts
+│  │  │  │  ├─ grouping.ts
+│  │  │  │  ├─ sorting.test.ts
+│  │  │  │  ├─ sorting.ts
+│  │  │  │  ├─ state
+│  │  │  │  │  ├─ handlers
+│  │  │  │  │  └─ state.ts
+│  │  │  │  └─ types.ts
+│  │  │  ├─ editor
+│  │  │  │  ├─ components
+│  │  │  │  │  ├─ ProjectContent
+│  │  │  │  │  │  ├─ Body
+│  │  │  │  │  │  │  └─ ProjectContentBody.tsx
+│  │  │  │  │  │  ├─ Footer
+│  │  │  │  │  │  │  ├─ CloseAndCancelButton.tsx
+│  │  │  │  │  │  │  ├─ CommitButton.test.tsx
+│  │  │  │  │  │  │  ├─ CommitButton.tsx
+│  │  │  │  │  │  │  ├─ DeleteButton.tsx
+│  │  │  │  │  │  │  └─ Footer.tsx
+│  │  │  │  │  │  ├─ Header
+│  │  │  │  │  │  │  └─ Header.tsx
+│  │  │  │  │  │  └─ PlanContent.tsx
+│  │  │  │  │  └─ ValidationErrorDialog.tsx
+│  │  │  │  ├─ Editor.tsx
+│  │  │  │  ├─ hooks
+│  │  │  │  │  └─ saveContext.ts
+│  │  │  │  ├─ state
+│  │  │  │  │  ├─ commands.test.ts
+│  │  │  │  │  ├─ commands.ts
+│  │  │  │  │  ├─ handlers
+│  │  │  │  │  │  ├─ createNewDraftProject.ts
+│  │  │  │  │  │  ├─ createProjectDraft.ts
+│  │  │  │  │  │  ├─ handleCancelCurrentEdits.ts
+│  │  │  │  │  │  ├─ handleCreateEditorProject.ts
+│  │  │  │  │  │  ├─ handleStartCreateNewProject.ts
+│  │  │  │  │  │  ├─ handleStartEditProject.ts
+│  │  │  │  │  │  └─ handleUpdateProject.ts
+│  │  │  │  │  ├─ reducer.ts
+│  │  │  │  │  ├─ selector.ts
+│  │  │  │  │  └─ state.ts
+│  │  │  │  ├─ types
+│  │  │  │  │  └─ projectDraft.ts
+│  │  │  │  ├─ validation.ts
+│  │  │  │  └─ validationMessages.ts
+│  │  │  ├─ fields.ts
+│  │  │  ├─ model.ts
+│  │  │  ├─ ProjectIndex.tsx
+│  │  │  ├─ projects.test.tsx
+│  │  │  ├─ ProjectView.tsx
+│  │  │  ├─ state
+│  │  │  │  ├─ handlers
+│  │  │  │  │  ├─ handleCloseEditor.ts
+│  │  │  │  │  └─ handleOpenEditor.ts
+│  │  │  │  ├─ reducer.test.ts
+│  │  │  │  ├─ reducer.ts
+│  │  │  │  ├─ selector.ts
+│  │  │  │  ├─ slice.ts
+│  │  │  │  └─ state.ts
+│  │  │  └─ types
+│  │  │     └─ project.ts
+│  │  ├─ shared
+│  │  │  ├─ ui
+│  │  │  │  ├─ Badge.tsx
+│  │  │  │  ├─ Button.tsx
+│  │  │  │  ├─ Card.tsx
+│  │  │  │  ├─ Field.tsx
+│  │  │  │  ├─ Heading.tsx
+│  │  │  │  ├─ MessageBox.tsx
+│  │  │  │  └─ Tab.tsx
+│  │  │  └─ util
+│  │  │     └─ state.ts
+│  │  └─ utils
+│  │     ├─ authResponses.test.ts
+│  │     └─ authResponses.ts
+│  ├─ test
+│  │  └─ browser
+│  │     └─ auth.spec.ts
+│  ├─ tsconfig.json
+│  ├─ vite.config.ts
+│  └─ vitest.config.ts
+├─ package.json
+├─ pnpm-lock.yaml
+├─ pnpm-workspace.yaml
+├─ README.md
+├─ scripts
+│  ├─ dev.mjs
+│  └─ dev.test.mjs
+├─ server
+│  ├─ package.json
+│  ├─ src
+│  │  ├─ app.ts
+│  │  ├─ auth
+│  │  │  ├─ configuration.ts
+│  │  │  ├─ oidc.ts
+│  │  │  ├─ policy.ts
+│  │  │  ├─ repository.ts
+│  │  │  ├─ routes.ts
+│  │  │  └─ service.ts
+│  │  ├─ db
+│  │  │  ├─ configuration.ts
+│  │  │  ├─ database.ts
+│  │  │  ├─ migrate-main.ts
+│  │  │  ├─ migrate.ts
+│  │  │  ├─ migrations
+│  │  │  │  ├─ 0001_initial.ts
+│  │  │  │  ├─ 0002_authentication.ts
+│  │  │  │  ├─ 0003_project_ownership.ts
+│  │  │  │  └─ 0004_project_context.ts
+│  │  │  └─ migrations.ts
+│  │  ├─ main.ts
+│  │  ├─ production-app.ts
+│  │  ├─ projects
+│  │  │  ├─ creation.ts
+│  │  │  ├─ module.ts
+│  │  │  ├─ policy.ts
+│  │  │  ├─ router-errors.ts
+│  │  │  └─ routes.ts
+│  │  └─ readiness.ts
+│  ├─ test
+│  │  ├─ auth-configuration.test.ts
+│  │  ├─ auth-policy.test.ts
+│  │  ├─ database-configuration.test.ts
+│  │  ├─ fixtures
+│  │  │  ├─ auth-browser.ts
+│  │  │  └─ failing-migration.ts
+│  │  ├─ integration
+│  │  │  ├─ auth.test.ts
+│  │  │  ├─ database.test.ts
+│  │  │  └─ projects.test.ts
+│  │  ├─ project-policy.test.ts
+│  │  ├─ readiness.test.ts
+│  │  ├─ request-logging.test.ts
+│  │  └─ support
+│  │     ├─ database.ts
+│  │     └─ oidc-provider.ts
+│  ├─ tsconfig.json
+│  └─ tsconfig.test.json
+└─ _docs
+   ├─ code-style.md
+   ├─ plan.md
+   ├─ process.md
+   ├─ task-template.md
+   ├─ team
+   │  ├─ pm.md
+   │  ├─ qa-engineer.md
+   │  └─ software-engineer.md
+   └─ testing-guidelines.md
 
-Open `http://127.0.0.1:5173`. Sign-in completes through the signed fake provider.
-For a retry case, open `/api/test/provider-mode?mode=cancel` on that origin,
-return to `/`, and sign in again; use `mode=valid` to restore success. Other
-modes include `failure`, `signature`, `issuer`, `audience`, `expiry` and `nonce`.
-Only this explicitly launched test harness exposes that control; production
-does not import or expose the fake provider. A brief harness-only delay makes
-pending/cancel controls observable. Check Tab/Enter interaction, cancellation,
-retry, sign-out, and narrow/wide layouts. Ctrl+C on the API closes pools/provider
-and drops only its uniquely created test database.
-
-### Live Auth0 smoke procedure (not yet performed)
-
-1. Configure a real Auth0 Regular Web Application and the exact allowed callback
-   and application origin above; supply server credentials and migrated database.
-2. Start the app at the configured origin. Sign in through the actual Universal
-   Login screen and confirm the signed-in view and 200 `/api/session` response.
-3. Inspect browser storage: only opaque app/login cookies, no provider tokens;
-   on HTTPS confirm HttpOnly, Secure, SameSite=Lax and Path=/.
-4. Cancel a fresh hosted login and confirm generic retry with no new session.
-5. Sign out of this app; verify 204, cleared cookie, and old-cookie replay 401.
-   Confirm a cross-origin logout attempt returns 403 without revoking the session.
-6. Record tenant/environment, date and observed results without credentials or
-   token values. No live tenant credentials were available for the implementation
-   tests, so this procedure must not be reported as passed until actually run.
+```
