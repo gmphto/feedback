@@ -1,6 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit'
 import { projectReducer } from './reducer';
 import { createInitialState } from './state';
+import { dashboardReducer } from '../dashboard/state/reducer';
 import { editorReducer } from '../editor/state/reducer';
 
 export const slice = createSlice({
@@ -12,6 +13,7 @@ export const slice = createSlice({
     reducers: {
         reset: () => createInitialState(),
         ...projectReducer,
+        ...dashboardReducer,
         ...editorReducer,
     },
 
