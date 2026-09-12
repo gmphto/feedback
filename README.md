@@ -1,4 +1,4 @@
-# Project Scope Tool
+# Lumera
 
 A full-stack workspace for planning and tracking software projects.
 

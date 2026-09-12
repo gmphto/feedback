@@ -22,6 +22,6 @@ describe('application shell', () => {
       </React.StrictMode>,
     );
 
-    expect(markup).toContain('<h1>Project Scope Tool</h1>');
+    expect(markup).toContain('<h1>Lumera</h1>');
   });
 });

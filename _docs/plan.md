@@ -1,8 +1,8 @@
 # Current plan
 
-Project Scope Tool turns rough project ideas into a precise, justified MVP scope.
+Lumera turns rough project ideas into a precise, justified MVP scope.
 
-[GitHub issues](https://github.com/gmphto/project-scope-tool/issues) are the implementation backlog. Follow the [current process](process.md): groom, implement, independently verify, then close one issue at a time.
+[GitHub issues](https://github.com/gmphto/feedback/issues) are the implementation backlog. Follow the [current process](process.md): groom, implement, independently verify, then close one issue at a time.
 
 The application contains a minimal React authentication UI, a Fastify database/schema readiness endpoint, ordered PostgreSQL migrations, isolated unit tests and real database integration tests. Issue #4 adds Auth0 OIDC authentication, PostgreSQL identities/application sessions, expiry/revocation, browser-bound callbacks and exact-Origin mutation protection. Automated signed fake-provider contracts cover token validation; a live Auth0 tenant smoke test remains unperformed. Project workflows, AI integration, navigation, and deployment belong to their later issues.
 

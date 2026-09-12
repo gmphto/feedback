@@ -12,4 +12,4 @@ export const railWidth = 56;
 export const topBarHeight = 48;
 
 /** The product name. The top bar and the signed-out page both show it. */
-export const productName = 'Project Scope Tool';
+export const productName = 'Lumera';
