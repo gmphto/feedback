@@ -3,10 +3,10 @@ import { setupListeners } from '@reduxjs/toolkit/query';
 
 // Injects the auth endpoints into feedApi before the store is built, so the
 // endpoint inventory does not depend on which module the bundler evaluates first.
-import { projectApi } from '../../projects/api/api';
-import projectReducer from '../../projects/state/slice';
-import { feedApi } from '../api/api';
-import '../../auth/auth';
+import { projectApi } from '../features/projects/api/api';
+import projectReducer from '../features/projects/state/slice';
+import { feedApi } from '../shared/api/api';
+import '../features/auth/api/auth';
 
 export const store = configureStore({
   reducer: {

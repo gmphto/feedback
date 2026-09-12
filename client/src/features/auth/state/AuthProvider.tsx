@@ -1,16 +1,16 @@
 import { useSnackbar } from 'notistack';
 import * as React from 'react';
 
-import { createContext } from '../../components/Context';
-import { useAppDispatch } from '../../core/store/hooks';
-import { useFocusSessionRevalidation } from '../../core/api/useFocusSessionRevalidation';
-import { feedApi } from '../../core/api/api';
+import { createContext } from '../../../shared/Context';
+import { useAppDispatch } from '../../../app/hooks';
+import { useFocusSessionRevalidation } from '../../../shared/api/useFocusSessionRevalidation';
+import { feedApi } from '../../../shared/api/api';
 import {
   useGetSessionQuery,
   useLoginMutation,
   useLogoutMutation,
-} from '../auth';
-import type { User } from '../../utils/authResponses';
+} from '../api/auth';
+import type { User } from '../authResponses';
 
 interface AuthState {
   user: User | null;

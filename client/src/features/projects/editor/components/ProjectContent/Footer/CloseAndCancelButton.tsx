@@ -1,7 +1,7 @@
 import { Button } from "@mui/material";
 import { useState } from "react";
-import { useAppDispatch, useAppSelector } from "../../../../../core/store/hooks";
-import { OkCancelConfirm, type OkCancelResult } from "../../../../../shared/ui/MessageBox";
+import { useAppDispatch, useAppSelector } from "../../../../../../app/hooks";
+import { OkCancelConfirm, type OkCancelResult } from "../../../../../../shared/ui/MessageBox";
 import { projectActions } from "../../../../state/slice";
 import { selectEditor, selectEditorCommands, selectProjectIsEditMode } from "../../../state/selector";
 

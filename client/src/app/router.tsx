@@ -8,8 +8,8 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 
-import { ProjectIndex } from '../projects/ProjectIndex';
-import { useAuth } from '../auth/contexts/AuthProvider';
+import { ProjectIndex } from '../features/projects/ProjectIndex';
+import { useAuth } from '../features/auth/state/AuthProvider';
 import { AppShell } from './shell/AppShell';
 import { productName } from './shell/layout';
 import { findSelectedDestination, navigationRoutePaths } from './shell/navigation';

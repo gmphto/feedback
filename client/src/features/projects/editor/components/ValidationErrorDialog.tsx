@@ -1,6 +1,6 @@
 import type { ProjectDraft } from '../types/projectDraft';
 import { getValidationMessage } from '../validationMessages';
-import { MessageBox } from '../../../shared/ui/MessageBox';
+import { MessageBox } from '../../../../shared/ui/MessageBox';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 

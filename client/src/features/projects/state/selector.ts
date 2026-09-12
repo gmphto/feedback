@@ -1,6 +1,6 @@
 import { createSelector } from "@reduxjs/toolkit";
 import { projectApi } from "../api/api";
-import type { RootState } from "../../core/store/configure";
+import type { RootState } from "../../../app/configure";
 
 export const selectActiveId = (state: RootState) =>
   state.project.editor.activeKey;

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAppDispatch, useAppSelector } from "../../../core/store/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import { projectActions } from "../../state/slice";
 import { showProjectValidationDialog } from "../components/ValidationErrorDialog";
 import { selectEditorCommands } from "../state/selector";
