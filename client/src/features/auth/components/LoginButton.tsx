@@ -4,10 +4,7 @@ import { Button } from '@mui/material';
 import { useAuth } from '../state/AuthProvider';
 
 export function LoginButton() {
-  const login = useAuth((state) => state.login, true);
-  // const isLoadingUser = useAuthOperations('LoginButton', (state) => state.isLoadingUser, true);
-  // const isLoggingIn = useAuthOperations('LoginButton', (state) => state.isLoggingIn, true);
-  // const isLoggingOut = useAuthOperations('LoginButton', (state) => state.isLoggingOut, true);
+  const login = useAuth('LoginButton', (state) => state.login, true);
 
   const handleLogin = React.useCallback(() => {
     void login();
@@ -15,10 +12,11 @@ export function LoginButton() {
 
   return (
     <Button
+      type="button"
+      variant="contained"
       onClick={handleLogin}
-      disabled={isLoadingUser || isLoggingIn || isLoggingOut}
     >
-      {isLoggingIn ? 'Opening secure sign-in…' : 'Sign in'}
+      Sign in
     </Button>
   );
 }

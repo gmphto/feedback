@@ -1,3 +1,4 @@
+import { LoginButton } from '../features/auth/components/LoginButton';
 import { useAuth } from '../features/auth/state/AuthProvider';
 import { AppRoutes } from './AppRoutes';
 import { productName } from './shell/layout';
@@ -9,6 +10,9 @@ function SignedOutPage() {
       <p className="mt-3 text-slate-600">
         Turn a rough project idea into a clear MVP scope.
       </p>
+      <div className="mt-6">
+        <LoginButton />
+      </div>
     </main>
   );
 }
