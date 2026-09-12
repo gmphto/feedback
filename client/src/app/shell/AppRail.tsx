@@ -1,9 +1,9 @@
-import { Box, Drawer, List, ListItemButton, Tooltip } from '@mui/material';
+import { Box, Drawer, List, ListItemButton, Tooltip, Typography } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
-import { Link } from '@tanstack/react-router';
+import { Link } from 'react-router-dom';
 
-import { railWidth } from './layout';
+import { railWidth, topBarHeight } from './layout';
 import type { NavigationDestination } from './navigation';
 import { isDestinationSelected } from './navigation';
 
@@ -84,6 +84,21 @@ export function AppRail({
         },
       }}
     >
+
+      <Box
+        aria-label={brandLabel}
+        title={brandLabel}
+        sx={{
+          height: topBarHeight,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+          {brandLabel}
+        </Typography>
+      </Box>
 
       <Box
         component="nav"

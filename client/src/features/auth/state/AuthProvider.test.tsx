@@ -37,12 +37,8 @@ vi.mock('notistack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mocks.enqueueSnackbar }),
 }));
 
-vi.mock('../services/api', () => ({
-  feedApi: {
-    util: {
-      resetApiState: () => ({ type: 'feedApi/resetApiState' }),
-    },
-  },
+vi.mock('../../../app/store', () => ({
+  sessionEnded: () => ({ type: 'app/sessionEnded' }),
 }));
 
 vi.mock('../services/auth', () => ({
@@ -171,7 +167,7 @@ describe('AuthProvider contracts', () => {
 
     await logout();
 
-    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'feedApi/resetApiState' });
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'app/sessionEnded' });
     expect(window.location.replace).toHaveBeenCalledWith('/');
     // The successful path replaces the document; it must not enqueue into it.
     expect(mocks.enqueueSnackbar).toHaveBeenCalledTimes(1);
@@ -182,7 +178,7 @@ describe('AuthProvider contracts', () => {
 
     expireSession();
 
-    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'feedApi/resetApiState' });
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'app/sessionEnded' });
     expect(window.location.replace).toHaveBeenCalledWith('/');
     expect(mocks.logoutMutation).not.toHaveBeenCalled();
   });

@@ -1,8 +1,12 @@
-import { AppBar, Box, Toolbar } from '@mui/material';
+import { AppBar, Box, Toolbar, Typography } from '@mui/material';
 
 import { topBarHeight } from './layout';
 
-export function AppTopBar() {
+interface AppTopBarProps {
+  pageLabel: string;
+}
+
+export function AppTopBar({ pageLabel }: AppTopBarProps) {
   // The session contract carries only the user id, so there is no name to build
   // initials from. The account mark stays until the contract supplies a name.
   // const accountLabel = `Signed in as account ${user.id}`;
@@ -37,15 +41,15 @@ export function AppTopBar() {
             minWidth: 0,
           }}
         >
-          {/* <Typography variant="body2" color="text.secondary" noWrap>
-            {productName}
+          <Typography variant="body2" color="text.secondary">
+            Application
           </Typography>
           <Typography variant="body2" color="text.disabled" aria-hidden="true">
             /
           </Typography>
           <Typography variant="subtitle2" color="text.primary" noWrap>
             {pageLabel}
-          </Typography> */}
+          </Typography>
         </Box>
 
         <Box sx={{ marginLeft: 'auto' }}>

@@ -16,12 +16,13 @@ interface AppShellProps {
 /**
  * The application frame: icon rail, top bar and content area.
  *
- * The shell reads no router state itself. Its caller passes the matched route ids
- * in, which keeps the rail's selection rule in one place and the shell renderable
- * on its own.
+ * The shell reads no router state itself. Its caller passes the current matched
+ * path in, which keeps the rail's selection rule in one place and the shell
+ * renderable on its own.
  */
 export function AppShell({
   productName,
+  pageLabel,
   matchedRouteIds,
   children,
 }: AppShellProps) {
@@ -47,7 +48,7 @@ export function AppShell({
           minWidth: 0,
         }}
       >
-        <AppTopBar/>
+        <AppTopBar pageLabel={pageLabel} />
 
         <Box
           component="main"

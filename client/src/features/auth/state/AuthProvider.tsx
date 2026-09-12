@@ -3,8 +3,8 @@ import * as React from 'react';
 
 import { createContext } from '../../../shared/Context';
 import { useAppDispatch } from '../../../app/hooks';
+import { sessionEnded } from '../../../app/store';
 import { useFocusSessionRevalidation } from '../../../shared/api/useFocusSessionRevalidation';
-import { feedApi } from '../../../shared/api/api';
 import {
   useGetSessionQuery,
   useLoginMutation,
@@ -68,7 +68,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const expireSession = React.useCallback(() => {
     setIsNavigating(true);
-    dispatch(feedApi.util.resetApiState());
+    // The root reducer re-runs every slice and RTK Query cache from `undefined`,
+    // so no feature registers a per-feature reset here.
+    dispatch(sessionEnded());
     window.location.replace('/');
   }, [dispatch]);
 
