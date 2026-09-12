@@ -12,7 +12,7 @@ export const slice = createSlice({
     reducers: {
         reset: () => createInitialState(),
         ...projectReducer,
-        ...editorReducer
+        ...editorReducer,
     },
 
     /** this is not needed, using rtk query which will own refresh logic */

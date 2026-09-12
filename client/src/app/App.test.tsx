@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { SnackbarProvider } from 'notistack';
 import { Provider } from 'react-redux';
-import { store } from './configure';
+import { store } from './store';
 import { AuthProvider } from '../features/auth/state/AuthProvider';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

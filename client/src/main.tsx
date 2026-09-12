@@ -7,7 +7,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { LightTheme } from './shared/theme';
 import { SnackbarProvider } from 'notistack';
 import { Provider } from 'react-redux';
-import { store } from './app/configure';
+import { store } from './app/store';
 import { AuthProvider } from './features/auth/state/AuthProvider';
 
 const rootElement = document.getElementById('root');
