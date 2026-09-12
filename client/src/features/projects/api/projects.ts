@@ -1,26 +1,48 @@
-import type { ProjectDraft } from "../editor/types/projectDraft";
-import type { Project } from "../types/project";
-import type { ApiProject } from "./types";
+import type { ProjectDraft } from '../../_ref_clean_projects/fields';
+import type { Project } from '../types/project';
+import type { ApiProject } from './types';
 
-// server ---> client
+/**
+ * Server <-> client converters. The server owns the wire shape; the client
+ * view model lives in `types/project.ts` and `fields.ts`. Nothing else in the
+ * client may build an `ApiProject` by hand.
+ *
+ * Wire shapes are deliberately NOT imported from the server: the client owns
+ * its copy of the contract so it can evolve independently.
+ */
+
+/** server ---> client */
+export function setupProject(project: ApiProject): Project {
+  return {
+    projectId: project.id,
+    name: project.name,
+    idea: project.idea,
+    job: project.job,
+    problem: project.problem,
+    mvpOutcome: project.mvpOutcome,
+    initialProductAreas: project.initialProductAreas,
+    constraints: project.constraints,
+    version: project.version,
+  };
+}
+
 export function setupProjects(projects: ApiProject[]): Project[] {
-    return (projects || []).map((project) => setupProject(project));
+  return (projects ?? []).map(setupProject);
 }
 
-function setupProject(project: ApiProject): Project {
-    return {
-
-        ...project
-    };
-}
-
-// client ---> server
+/** client ---> server */
 export function convertProjectToApi(draft: ProjectDraft): ApiProject {
-
-    // omit validation stuff
-
-    return {
-
-        ...draft
-    };
+  // The client draft already has defaults for every field, so it is safe to
+  // send the whole draft; the server re-validates and strips nothing.
+  return {
+    id: 0,
+    version: 1,
+    name: draft.name,
+    idea: draft.roughIdea,
+    job: draft.coreJob,
+    problem: draft.mainProblem,
+    mvpOutcome: draft.mvpOutcome,
+    initialProductAreas: draft.initialProductAreas,
+    constraints: draft.constraints,
+  };
 }

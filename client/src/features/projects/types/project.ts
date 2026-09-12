@@ -16,21 +16,13 @@ export interface Project {
      */
     name?: string;
 
-    /**
-     * The project number. This field is optional and can be left empty.
-     */
-    projectNumber?: number;
-
-    /**
-     * A brief description of the project.
-     * This field is optional and can be left empty.
-     */
-    idea?: string;
-    job?: string;
-    problem?: string;
-    mvpOutcome?: string;
-    initialProductAreas?: string;
-    constraints?: string;
+    roughIdea: string;
+    primaryUser: string;
+    coreJob: string;
+    mainProblem: string;
+    mvpOutcome: string;
+    initialProductAreas: string;
+    constraints: string;
 
     /** 
      * The date and time when the project was created. 

@@ -5,32 +5,42 @@ import type { ProjectDraft } from "./types/projectDraft";
  */
 export interface ProjectValidationStatus {
 
-    /**
-     * Indicates whether the project is valid and can be saved or submitted.
+  /**
+   * Indicates whether the project is valid and can be saved or submitted.
+   */
+  ok: boolean;
+
+  /**
+     * Indicates whether the project can be saved as a draft.
      */
-    ok: boolean;
-
-    /**
-       * Indicates whether the project can be saved as a draft.
-       */
-    canSaveDraft: boolean;
+  canSaveDraft: boolean;
 
 
-    /** name validator */
-    name?: string;
+  /** name validator */
+  name?: string;
+
+  /** rough Idea */
+  roughIdea?: string;
+  primaryUser?: string;
+  coreJob?: string;
+  mainProblem?: string;
+  mvpOutcome?: string;
+  initialProductAreas?: string;
+  constraints?: string;
 
 }
 
 
-type RawDraft = Omit<ProjectDraft, "validation"> 
+type RawDraft = Omit<ProjectDraft, "validation">
 
 
 const messages = {
   name: {
-    required: "Name is required.",
-  }
-} 
-
+    required: 'Enter a project name.',
+  },
+  noNul: 'Remove the NUL character.',
+  maxLength: (limit: number) => `Use ${limit} characters or fewer.`,
+};
 
 
 /**
@@ -41,26 +51,73 @@ const messages = {
 export function validateProject(draft: RawDraft): ProjectValidationStatus {
 
 
-    // runs validation rules
-    const validation: Omit<ProjectValidationStatus, "ok" | "canSaveDraft"> = {
-        name: validateName(draft.name)
-    }
+  // runs validation rules
+  const validation: Omit<ProjectValidationStatus, "ok" | "canSaveDraft"> = {
+    name: validateName(draft.name),
+    roughIdea: validateRoughIdea(draft.roughIdea),
+    primaryUser: validatePrimaryUser(draft.primaryUser),
+    coreJob: validateCoreJob(draft.coreJob),
+    mainProblem: validateMainProblem(draft.mainProblem),
+    mvpOutcome: validateMvpOutcome(draft.mvpOutcome),
+    initialProductAreas: validateInitialProductAreas(draft.initialProductAreas),
+    constraints: validateConstraints(draft.constraints),
+  }
 
-    const ok = isValid(validation)
+  const ok = isValid(validation)
 
-    return {
-        ok,
-        canSaveDraft: ok,
-        ...validation
-    }
+  return {
+    ok,
+    canSaveDraft: ok,
+    ...validation
+  }
 }
 
-function validateName(n: string | undefined) {
-    return required(n, messages.name.required)
+function validateName(name: string | undefined) {
+  const value = (name ?? '').trim();
+
+  return required(value, messages.name.required)
+    ?? noNul(value)
+    ?? maxLength(value, 200);
 }
 
-function required(value: unknown, message: string) {
-    return value ? undefined : message;
+function validateRoughIdea(value: string) {
+  return noNul(value) ?? maxLength(value, 10000);
+}
+
+function validatePrimaryUser(value: string) {
+  return noNul(value) ?? maxLength(value, 4000);
+}
+
+function validateCoreJob(value: string) {
+  return noNul(value) ?? maxLength(value, 4000);
+}
+
+function validateMainProblem(value: string) {
+  return noNul(value) ?? maxLength(value, 4000);
+}
+
+function validateMvpOutcome(value: string) {
+  return noNul(value) ?? maxLength(value, 4000);
+}
+
+function validateInitialProductAreas(value: string) {
+  return noNul(value) ?? maxLength(value, 4000);
+}
+
+function validateConstraints(value: string) {
+  return noNul(value) ?? maxLength(value, 10000);
+}
+
+function required(value: string, message: string) {
+  return value ? undefined : message;
+}
+
+function noNul(value: string) {
+  return value.includes('\0') ? messages.noNul : undefined;
+}
+
+function maxLength(value: string, limit: number) {
+  return [...value].length > limit ? messages.maxLength(limit) : undefined;
 }
 
 

@@ -1,75 +1,45 @@
-import {
-  createApi,
-  fetchBaseQuery,
-} from "@reduxjs/toolkit/query/react";
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
-import type { Project } from "../types/project";
-import type { ProjectDraft } from "../editor/types/projectDraft";
-import { convertProjectToApi, setupProjects } from "./projects";
+import type { Project } from '../types/project';
+import type { ProjectDraft } from '../../_ref_clean_projects/fields';
+import { setupProject, setupProjects, convertProjectToApi } from './projects';
 
-// export interface CreateProjectRequest {
-//   name: string;
-//   description: string;
-// }
-
-// export interface UpdateProjectRequest {
-//   projectId: number;
-//   name: string;
-//   description: string;
-// }
-
-// const listTags = 
-
-type ApiProject = Project;
-
-// type ApiData = {
-//   projects: ApiProject
-// }
-
-// const baseUrl = "/api/projects/"
-
-// const reducerPath = "projectApi"
-
-// const tagTypes = ["Project"]
-
-// const get = builder.query<Project, number>({} as const)
-
-// const body = {
-//       query: () => "/projects",
-
-//       providesTags: (projects) => [
-//         { type: "Project", id: "LIST" },
-
-//         ...(projects ?? []).map(({ projectId }) => ({
-//           type: "Project" as const,
-//           projectId,
-//         })),
-//       ],
-//     }
-
-// const body = 
-
+/**
+ * The feature-owned API surface, registered in `app/store.ts` under
+ * `projectApi.reducerPath`. RTK Query owns request data, loading and errors;
+ * the slice must never copy these.
+ *
+ * Endpoints:
+ * - GET  /api/projects                    -> list summaries
+ * - GET  /api/projects/:id                -> one summary (the PATCH render target)
+ * - GET  /api/projects/:id/definition     -> full editable context after create
+ * - POST /api/projects                    -> create; 201 returns the definition
+ * - PATCH /api/projects/:id               -> rename (optimistic single-project)
+ * - DELETE /api/projects/:id              -> remove
+ *
+ * The server returns `{ project }` envelopes for single-resource endpoints and
+ * `{ projects }` for the list; the response schema is declared in
+ * `server/src/projects/routes.ts`.
+ */
 export const projectApi = createApi({
-  reducerPath: "projectApi",
+  reducerPath: 'projectApi',
 
-  baseQuery: fetchBaseQuery({
-    baseUrl: "/api",
-  }),
+  baseQuery: fetchBaseQuery({ baseUrl: '/api' }),
 
-  tagTypes: ["Project"],
+  tagTypes: ['Project'],
 
   endpoints: (builder) => ({
-    getProjects: builder.query<ApiProject[], void>({
-      query: () => "/projects",
+    getProjects: builder.query<Project[], void>({
+      query: () => '/projects',
 
-      transformResponse: (res) => setupProjects(res),
+      transformResponse: (res: { projects: ApiProject[] }) =>
+        setupProjects(res.projects),
 
       providesTags: (projects) => [
-        { type: "Project", id: "LIST" },
-
+        { type: 'Project', id: 'LIST' },
         ...(projects ?? []).map(({ projectId }) => ({
-          type: "Project" as const,
-          projectId,
+          type: 'Project' as const,
+          id: projectId!,
         })),
       ],
     }),
@@ -77,85 +47,82 @@ export const projectApi = createApi({
     getProject: builder.query<Project, number>({
       query: (projectId) => `/projects/${projectId}`,
 
+      transformResponse: (res: { project: ApiProject }) =>
+        setupProject(res.project),
+
       providesTags: (_project, _error, projectId) => [
-        {
-          type: "Project",
-          id: projectId,
-        },
+        { type: 'Project', id: projectId },
       ],
     }),
 
-    createProject: builder.mutation<
-      Project,
-      ProjectDraft
-    >({
+    getProjectDefinition: builder.query<Project, number>({
+      query: (projectId) => `/projects/${projectId}/definition`,
+
+      transformResponse: (res: { project: ApiProject }) =>
+        setupProject(res.project),
+
+      providesTags: (_project, _error, projectId) => [
+        { type: 'Project', id: projectId },
+      ],
+    }),
+
+    createProject: builder.mutation<Project, ProjectDraft>({
       query: (draft) => ({
-        url: "/projects",
-        method: "POST",
+        url: '/projects',
+        method: 'POST',
         body: convertProjectToApi(draft),
       }),
 
-      invalidatesTags: [
-        {
-          type: "Project",
-          id: "LIST",
-        },
-      ],
+      transformResponse: (res: { project: ApiProject }) =>
+        setupProject(res.project),
+
+      invalidatesTags: [{ type: 'Project', id: 'LIST' }],
     }),
 
     updateProject: builder.mutation<
       Project,
-      ProjectDraft
+      { projectId: number; name: string; expectedVersion: number }
     >({
-      query: ({ projectId, ...draft }) => ({
+      query: ({ projectId, name, expectedVersion }) => ({
         url: `/projects/${projectId}`,
-        method: "PUT",
-        body: convertProjectToApi(draft),
+        method: 'PATCH',
+        body: { name, expectedVersion },
       }),
 
-      invalidatesTags: (
-        _project,
-        _error,
-        { projectId },
-      ) => [
-        {
-          type: "Project",
-          id: projectId,
-        },
-        {
-          type: "Project",
-          id: "LIST",
-        },
+      transformResponse: (res: { project: ApiProject }) =>
+        setupProject(res.project),
+
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'Project', id: projectId },
+        { type: 'Project', id: 'LIST' },
       ],
     }),
 
     deleteProject: builder.mutation<void, number>({
       query: (projectId) => ({
         url: `/projects/${projectId}`,
-        method: "DELETE",
+        method: 'DELETE',
       }),
 
-      invalidatesTags: (
-        _result,
-        _error,
-        projectId,
-      ) => [
-        {
-          type: "Project",
-          id: projectId,
-        },
-        {
-          type: "Project",
-          id: "LIST",
-        },
+      invalidatesTags: (_result, _error, projectId) => [
+        { type: 'Project', id: projectId },
+        { type: 'Project', id: 'LIST' },
       ],
     }),
   }),
 });
 
+/** Untyped helper for transformResponse payloads. */
+export type ApiProject = {
+  id: number;
+  name: string;
+  version: number;
+};
+
 export const {
   useGetProjectsQuery,
   useGetProjectQuery,
+  useGetProjectDefinitionQuery,
   useCreateProjectMutation,
   useUpdateProjectMutation,
   useDeleteProjectMutation,
