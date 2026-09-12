@@ -14,12 +14,9 @@ const signOutConfirmation = {
 export function LogoutButton() {
   const user = useAuth('LogoutButton', (state) => state.user, true);
   const logout = useAuthOperations('LogoutButton', (state) => state.logout, true);
-  // const isLoadingUser = useAuthOperations('LogoutButton', (state) => state.isLoadingUser, true);
-  // const isLoggingIn = useAuthOperations('LogoutButton', (state) => state.isLoggingIn, true);
-  // const isLoggingOut = useAuthOperations('LogoutButton', (state) => state.isLoggingOut, true);
   const [isConfirmationOpen, setConfirmationOpen] = React.useState(false);
   const cancelButtonRef = React.useRef<HTMLButtonElement>(null);
-  const isDisabled = !user || isLoadingUser || isLoggingIn || isLoggingOut;
+  const isDisabled = !user;
 
   const handleOpenConfirmation = React.useCallback(() => {
     setConfirmationOpen(true);
@@ -43,7 +40,7 @@ export function LogoutButton() {
 
   React.useEffect(() => {
     setConfirmationOpen(false);
-  }, [user?.id, isLoadingUser]);
+  }, [user?.id]);
 
   const confirmationActions = (
     <>
@@ -68,7 +65,7 @@ export function LogoutButton() {
   return (
     <>
       <Button disabled={isDisabled} onClick={handleOpenConfirmation}>
-        {isLoggingOut ? 'Ending this application session…' : 'Sign out of this app'}
+        {'Sign out of this app'}
       </Button>
       <MessageBox
         open={isConfirmationOpen}
