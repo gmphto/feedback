@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { Button } from '@mui/material';
 
-import { MessageBox } from '../shared/ui/MessageBox';
-import { useAuth, useAuthOperations } from '../auth/contexts/AuthProvider';
+import { MessageBox } from '../../../shared/ui/MessageBox';
+import { useAuth, useAuthOperations } from '../state/AuthProvider';
 
 const signOutConfirmation = {
   title: 'Sign out of this app?',

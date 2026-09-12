@@ -1,6 +1,6 @@
 import Button from "@mui/material/Button"
 import { useState } from "react"
-import { useAppDispatch } from "../../../../../core/store/hooks"
+import { useAppDispatch } from "../../../../../../app/hooks"
 import { useUpdateProjectMutation } from "../../../../api/api"
 import { projectActions } from "../../../../state/slice"
 import { useSaveContext } from "../../../hooks/saveContext"

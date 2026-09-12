@@ -4,11 +4,11 @@ import { createRoot } from 'react-dom/client';
 import App from './app/App';
 import './index.css';
 import { ThemeProvider } from '@mui/material/styles';
-import { LightTheme } from './core/theme';
+import { LightTheme } from './shared/theme';
 import { SnackbarProvider } from 'notistack';
 import { Provider } from 'react-redux';
-import { store } from './core/store/configure';
-import { AuthProvider } from './auth/contexts/AuthProvider';
+import { store } from './app/configure';
+import { AuthProvider } from './features/auth/state/AuthProvider';
 
 const rootElement = document.getElementById('root');
 

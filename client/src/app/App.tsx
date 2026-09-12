@@ -1,14 +1,14 @@
 import { RouterProvider } from '@tanstack/react-router';
 import * as React from 'react';
 
-import { LoginButton } from '../components/LoginButton';
-import { LogoutButton } from '../components/LogoutButton';
-import { useAppDispatch } from '../core/store/hooks';
-import { useAuth, useAuthOperations } from '../auth/contexts/AuthProvider';
-import { createProjectApi } from '../projects/api';
-import { projectApi } from '../projects/api/api';
-import { createProjectModel } from '../projects/model';
-import { projectActions } from '../projects/state/slice';
+import { LoginButton } from '../features/auth/components/LoginButton';
+import { LogoutButton } from '../features/auth/components/LogoutButton';
+import { useAppDispatch } from './hooks';
+import { useAuth, useAuthOperations } from '../features/auth/state/AuthProvider';
+import { createProjectApi } from '../features/projects/api';
+import { projectApi } from '../features/projects/api/api';
+import { createProjectModel } from '../features/projects/model';
+import { projectActions } from '../features/projects/state/slice';
 import { router } from './router';
 import { productName } from './shell/layout';
 

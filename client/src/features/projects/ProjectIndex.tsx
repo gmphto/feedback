@@ -1,4 +1,4 @@
-import { useAppSelector } from "../core/store/hooks";
+import { useAppSelector } from "../../app/hooks";
 import { ProjectDashboard } from "./dashboard/Dashboard";
 import { ProjectEditor } from "./editor/Editor";
 import { selectView } from "./state/selector";

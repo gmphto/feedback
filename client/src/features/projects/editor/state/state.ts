@@ -1,4 +1,4 @@
-import type { Editable } from "../../../shared/util/state"
+import type { Editable } from "../../../../shared/state"
 import type { Project } from "../../types/project";
 import type { ProjectValidationStatus } from "../validation";
 

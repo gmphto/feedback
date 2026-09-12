@@ -1,6 +1,6 @@
 import { Box } from '@mui/material';
 
-import type { User } from '../../utils/authResponses';
+import type { User } from '../../features/auth/authResponses';
 import { AppRail } from './AppRail';
 import { AppTopBar } from './AppTopBar';
 import { navigationDestinations } from './navigation';

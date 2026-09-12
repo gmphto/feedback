@@ -1,10 +1,10 @@
-import { feedApi } from '../core/api/api';
+import { feedApi } from '../../../shared/api/api';
 import {
   readLoginResponse,
   readLogoutResponse,
   readSessionResponse,
   type User,
-} from '../utils/authResponses';
+} from '../authResponses';
 
 export const {
   useGetSessionQuery,

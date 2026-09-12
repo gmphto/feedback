@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '@mui/material';
 
-import { useAuth } from '../auth/contexts/AuthProvider';
+import { useAuth } from '../state/AuthProvider';
 
 export function LoginButton() {
   const login = useAuth((state) => state.login, true);
