@@ -9,7 +9,13 @@ export const createNewDraftProject = (): ProjectDraft => {
         hasChanged: true,
         isReadOnly: false,
         name: "",
-        projectNumber: 0,
+        roughIdea: "",
+        primaryUser: "",
+        coreJob: "",
+        mainProblem: "",
+        mvpOutcome: "",
+        initialProductAreas: "",
+        constraints: "",
     };
 
     return { ...draft, validation: validateProject(draft) };
