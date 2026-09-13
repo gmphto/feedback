@@ -80,8 +80,8 @@ export function Header({
 
       <IconButton
         size="small"
-        aria-label="Create plan"
-        title="Create plan"
+        aria-label="Create project"
+        title="Create project"
         onClick={onCreate}
         sx={{
           width: 24,
